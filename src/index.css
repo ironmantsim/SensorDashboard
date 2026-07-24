@@ -1,0 +1,177 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 20% 97%;
+    --foreground: 220 30% 10%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 30% 10%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 30% 10%;
+
+    --primary: 192 100% 40%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 220 15% 92%;
+    --secondary-foreground: 220 30% 20%;
+
+    --muted: 220 15% 92%;
+    --muted-foreground: 220 10% 50%;
+
+    --accent: 192 80% 88%;
+    --accent-foreground: 192 100% 20%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 15% 88%;
+    --input: 220 15% 88%;
+    --ring: 192 100% 40%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 220 25% 14%;
+    --sidebar-foreground: 220 15% 85%;
+    --sidebar-primary: 192 100% 50%;
+    --sidebar-primary-foreground: 220 30% 5%;
+    --sidebar-accent: 220 20% 20%;
+    --sidebar-accent-foreground: 220 15% 90%;
+    --sidebar-border: 220 20% 20%;
+    --sidebar-ring: 192 100% 50%;
+
+    /* Custom tokens */
+    --sensor-active: 142 70% 45%;
+    --sensor-inactive: 0 70% 55%;
+    --sensor-pending: 38 90% 55%;
+    --chart-1: 192 100% 45%;
+    --chart-2: 280 80% 65%;
+    --chart-3: 38 90% 55%;
+    --chart-4: 142 60% 50%;
+    --chart-5: 0 70% 60%;
+  }
+
+  .dark {
+    --background: 220 30% 6%;
+    --foreground: 210 30% 92%;
+
+    --card: 220 25% 10%;
+    --card-foreground: 210 30% 92%;
+
+    --popover: 220 25% 10%;
+    --popover-foreground: 210 30% 92%;
+
+    --primary: 192 100% 50%;
+    --primary-foreground: 220 30% 5%;
+
+    --secondary: 220 20% 16%;
+    --secondary-foreground: 210 25% 80%;
+
+    --muted: 220 20% 14%;
+    --muted-foreground: 215 15% 55%;
+
+    --accent: 192 50% 15%;
+    --accent-foreground: 192 100% 70%;
+
+    --destructive: 0 70% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 20% 18%;
+    --input: 220 20% 18%;
+    --ring: 192 100% 50%;
+
+    --sidebar-background: 220 30% 5%;
+    --sidebar-foreground: 215 20% 75%;
+    --sidebar-primary: 192 100% 50%;
+    --sidebar-primary-foreground: 220 30% 5%;
+    --sidebar-accent: 220 25% 12%;
+    --sidebar-accent-foreground: 215 20% 85%;
+    --sidebar-border: 220 25% 12%;
+    --sidebar-ring: 192 100% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-muted;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/30 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/50;
+  }
+}
+
+@layer components {
+  .glass-card {
+    @apply bg-card/80 backdrop-blur-sm border border-border/50 rounded-xl;
+  }
+
+  .sensor-value {
+    @apply font-mono text-primary font-semibold;
+  }
+
+  .status-active {
+    @apply text-green-500 dark:text-green-400;
+  }
+
+  .status-inactive {
+    @apply text-red-500 dark:text-red-400;
+  }
+
+  .status-pending {
+    @apply text-yellow-500 dark:text-yellow-400;
+  }
+
+  .pulse-dot {
+    @apply w-2 h-2 rounded-full bg-green-500 animate-pulse;
+  }
+
+  .section-title {
+    @apply text-lg font-semibold text-foreground;
+  }
+
+  .label-text {
+    @apply text-xs font-medium text-muted-foreground uppercase tracking-wide;
+  }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, transparent 25%, hsl(var(--primary)/0.1) 50%, transparent 75%);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in-up {
+  animation: fadeInUp 0.3s ease-out forwards;
+}
