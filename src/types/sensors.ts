@@ -83,4 +83,5 @@ export type NavSection =
   | 'permissions'
   | 'status'
   | 'visualization'
-  | 'recording';
+  | 'recording'
+  | 'about';

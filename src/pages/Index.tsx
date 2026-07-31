@@ -14,6 +14,7 @@ import { PermissionsSection } from '@/components/features/PermissionsSection';
 import { SensorStatusSection } from '@/components/features/SensorStatusSection';
 import { VisualizationSection } from '@/components/features/VisualizationSection';
 import { RecordingSection } from '@/components/features/RecordingSection';
+import { AboutSection } from '@/components/features/AboutSection';
 import { NavSection } from '@/types/sensors';
 
 const SECTION_TITLES: Record<NavSection, string> = {
@@ -30,6 +31,7 @@ const SECTION_TITLES: Record<NavSection, string> = {
   status: 'Sensor Status',
   visualization: 'Data Visualization',
   recording: 'Sensor Recording',
+  about: 'About',
 };
 
 export default function Index() {
@@ -66,6 +68,7 @@ export default function Index() {
       case 'status': return <SensorStatusSection />;
       case 'visualization': return <VisualizationSection />;
       case 'recording': return <RecordingSection />;
+      case 'about': return <AboutSection />;
       default: return <DashboardHome onNavigate={setActiveSection} />;
     }
   };

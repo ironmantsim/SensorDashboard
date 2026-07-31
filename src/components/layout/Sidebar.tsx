@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Cpu, MapPin, Thermometer, Battery,
   Mic, Camera, Wifi, Monitor, ShieldCheck, CheckCircle,
-  BarChart2, X, Circle
+  BarChart2, X, Circle, Info
 } from 'lucide-react';
 
 interface NavItem {
@@ -27,6 +27,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'status', label: 'Sensor Status', icon: CheckCircle, color: 'text-green-500' },
   { id: 'visualization', label: 'Visualization', icon: BarChart2, color: 'text-rose-500' },
   { id: 'recording', label: 'Recording', icon: Circle, color: 'text-red-500' },
+  { id: 'about', label: 'About', icon: Info, color: 'text-primary' },
 ];
 
 interface SidebarProps {
