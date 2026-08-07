@@ -84,4 +84,5 @@ export type NavSection =
   | 'status'
   | 'visualization'
   | 'recording'
+  | 'account'
   | 'about';

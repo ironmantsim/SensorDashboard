@@ -15,6 +15,10 @@ import { SensorStatusSection } from '@/components/features/SensorStatusSection';
 import { VisualizationSection } from '@/components/features/VisualizationSection';
 import { RecordingSection } from '@/components/features/RecordingSection';
 import { AboutSection } from '@/components/features/AboutSection';
+import { AccountSection } from '@/components/features/AccountSection';
+import { AuthModal } from '@/components/features/AuthModal';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
 import { NavSection } from '@/types/sensors';
 
 const SECTION_TITLES: Record<NavSection, string> = {
@@ -31,10 +35,13 @@ const SECTION_TITLES: Record<NavSection, string> = {
   status: 'Sensor Status',
   visualization: 'Data Visualization',
   recording: 'Sensor Recording',
+  account: 'Account',
   about: 'About',
 };
 
 export default function Index() {
+  const { user } = useAuth();
+
   const [darkMode, setDarkMode] = useState(() => {
     const stored = localStorage.getItem('sensor-dash-dark');
     if (stored !== null) return stored === 'true';
@@ -43,6 +50,7 @@ export default function Index() {
 
   const [activeSection, setActiveSection] = useState<NavSection>('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [authModalOpen, setAuthModalOpen] = useState(false);
 
   useEffect(() => {
     if (darkMode) {
@@ -52,6 +60,20 @@ export default function Index() {
     }
     localStorage.setItem('sensor-dash-dark', String(darkMode));
   }, [darkMode]);
+
+  // Heartbeat: update last_seen every 30s when logged in
+  useEffect(() => {
+    if (!user) return;
+    const update = () => {
+      supabase
+        .from('user_profiles')
+        .update({ last_seen: new Date().toISOString() })
+        .eq('id', user.id);
+    };
+    update();
+    const interval = setInterval(update, 30000);
+    return () => clearInterval(interval);
+  }, [user?.id]);
 
   const renderSection = () => {
     switch (activeSection) {
@@ -68,6 +90,7 @@ export default function Index() {
       case 'status': return <SensorStatusSection />;
       case 'visualization': return <VisualizationSection />;
       case 'recording': return <RecordingSection />;
+      case 'account': return <AccountSection onOpenAuth={() => setAuthModalOpen(true)} />;
       case 'about': return <AboutSection />;
       default: return <DashboardHome onNavigate={setActiveSection} />;
     }
@@ -88,6 +111,7 @@ export default function Index() {
           onNavigate={setActiveSection}
           open={sidebarOpen}
           onClose={() => setSidebarOpen(false)}
+          onOpenAuth={() => setAuthModalOpen(true)}
         />
 
         <main className="flex-1 min-w-0 p-4 sm:p-6 lg:ml-0">
@@ -108,6 +132,8 @@ export default function Index() {
           {renderSection()}
         </main>
       </div>
+
+      <AuthModal open={authModalOpen} onClose={() => setAuthModalOpen(false)} />
     </div>
   );
 }

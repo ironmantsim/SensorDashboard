@@ -1,9 +1,10 @@
 import { NavSection } from '@/types/sensors';
+import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Cpu, MapPin, Thermometer, Battery,
   Mic, Camera, Wifi, Monitor, ShieldCheck, CheckCircle,
-  BarChart2, X, Circle, Info
+  BarChart2, X, Circle, Info, UserCircle2, LogIn,
 } from 'lucide-react';
 
 interface NavItem {
@@ -35,9 +36,12 @@ interface SidebarProps {
   onNavigate: (section: NavSection) => void;
   open: boolean;
   onClose: () => void;
+  onOpenAuth: () => void;
 }
 
-export function Sidebar({ activeSection, onNavigate, open, onClose }: SidebarProps) {
+export function Sidebar({ activeSection, onNavigate, open, onClose, onOpenAuth }: SidebarProps) {
+  const { user, loading: authLoading } = useAuth();
+
   const handleNav = (id: NavSection) => {
     onNavigate(id);
     onClose();
@@ -66,6 +70,45 @@ export function Sidebar({ activeSection, onNavigate, open, onClose }: SidebarPro
           <button onClick={onClose} className="text-sidebar-foreground/60 hover:text-sidebar-foreground">
             <X className="h-4 w-4" />
           </button>
+        </div>
+
+        {/* Auth button / Profile card at top */}
+        <div className="px-2 pt-3 pb-2 border-b border-sidebar-border">
+          {authLoading ? (
+            <div className="h-9 rounded-lg bg-muted/30 animate-pulse" />
+          ) : user ? (
+            <button
+              onClick={() => handleNav('account')}
+              className={cn(
+                'w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left transition-all',
+                activeSection === 'account'
+                  ? 'bg-sidebar-primary/10 border border-sidebar-primary/20'
+                  : 'hover:bg-sidebar-accent'
+              )}
+            >
+              <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center flex-shrink-0">
+                <span className="text-sm font-bold text-primary">
+                  {user.username.slice(0, 1).toUpperCase()}
+                </span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="text-xs font-semibold text-sidebar-foreground truncate">{user.username}</div>
+                <div className="flex items-center gap-1">
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                  <span className="text-[10px] text-sidebar-foreground/50">Online · Account</span>
+                </div>
+              </div>
+              <UserCircle2 className="h-3.5 w-3.5 text-sidebar-foreground/30 flex-shrink-0" />
+            </button>
+          ) : (
+            <button
+              onClick={onOpenAuth}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg bg-primary/10 border border-primary/25 text-primary text-xs font-semibold hover:bg-primary/20 transition-colors"
+            >
+              <LogIn className="h-3.5 w-3.5" />
+              Sign In / Sign Up
+            </button>
+          )}
         </div>
 
         <nav className="flex-1 overflow-y-auto py-2 px-2">

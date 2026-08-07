@@ -7,13 +7,16 @@ import { useNetwork } from '@/hooks/useNetwork';
 import { useAmbientLight } from '@/hooks/useAmbientLight';
 import { useBarometer } from '@/hooks/useBarometer';
 import { useMagnetometer } from '@/hooks/useMagnetometer';
+import { useAuth } from '@/hooks/useAuth';
+import { supabase } from '@/lib/supabase';
 import { SensorCard } from '@/components/features/SensorCard';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 import {
   Circle, Square, Download, Trash2, FileJson, FileText,
   Activity, Clock, Database, AlertCircle, MapPin, Battery,
-  Wifi, Navigation, Wind, SlidersHorizontal,
+  Wifi, Navigation, Wind, SlidersHorizontal, Share2, Upload, Loader2, X as XIcon,
 } from 'lucide-react';
 
 type GroupId = 'motion' | 'location' | 'compass' | 'battery' | 'environment' | 'network';
@@ -100,6 +103,7 @@ function formatElapsed(ms: number): string {
 
 export function RecordingSection() {
   const rec = useRecording();
+  const { user } = useAuth();
   const { motionData } = useMotionSensors();
   const { locationData } = useLocation();
   const battery = useBattery();
@@ -153,6 +157,33 @@ export function RecordingSection() {
       network_effective: enabledGroups.network ? networkData.effectiveType : null,
     }));
   }, [motionData, locationData, battery, networkData, light, baro, compass, enabledGroups]);
+
+  const [shareTitle, setShareTitle] = useState('');
+  const [showShareForm, setShowShareForm] = useState(false);
+  const [sharing, setSharing] = useState(false);
+
+  const handleShare = async () => {
+    if (!user || !shareTitle.trim()) return;
+    setSharing(true);
+    const { error } = await supabase
+      .from('shared_recordings')
+      .insert({
+        owner_id: user.id,
+        title: shareTitle.trim(),
+        data: rec.rows,
+        sensor_groups: SENSOR_GROUPS.filter(g => enabledGroups[g.id]).map(g => g.label),
+        sample_count: rec.rows.length,
+        duration_ms: rec.elapsed,
+      });
+    if (error) {
+      toast.error('Failed to share: ' + error.message);
+    } else {
+      toast.success('Recording shared to your cloud profile!');
+      setShowShareForm(false);
+      setShareTitle('');
+    }
+    setSharing(false);
+  };
 
   const hasData = rec.rows.length > 0;
   const activeGroupLabels = SENSOR_GROUPS.filter(g => enabledGroups[g.id]).map(g => g.label).join(', ');
@@ -354,6 +385,54 @@ export function RecordingSection() {
               </div>
             </button>
           </div>
+
+          {/* Share to cloud (only when logged in) */}
+          {user && !rec.isRecording && (
+            <div className="mt-3">
+              {!showShareForm ? (
+                <button
+                  onClick={() => setShowShareForm(true)}
+                  className="flex items-center gap-3 p-3 rounded-xl border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all duration-200 text-left group w-full"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Share2 className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <div className="text-sm font-semibold text-foreground group-hover:text-primary">Share to Cloud</div>
+                    <div className="text-xs text-muted-foreground">Save to your profile · visible to connected devices</div>
+                  </div>
+                </button>
+              ) : (
+                <div className="flex items-center gap-2 p-3 rounded-xl border border-primary/30 bg-primary/5">
+                  <Upload className="h-4 w-4 text-primary flex-shrink-0" />
+                  <input
+                    type="text"
+                    value={shareTitle}
+                    onChange={e => setShareTitle(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleShare()}
+                    placeholder="Recording title..."
+                    autoFocus
+                    className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={handleShare}
+                    disabled={sharing || !shareTitle.trim()}
+                    className="gap-1.5 h-7 flex-shrink-0"
+                  >
+                    {sharing ? <Loader2 className="h-3 w-3 animate-spin" /> : <Upload className="h-3 w-3" />}
+                    Share
+                  </Button>
+                  <button
+                    onClick={() => { setShowShareForm(false); setShareTitle(''); }}
+                    className="text-muted-foreground hover:text-foreground flex-shrink-0"
+                  >
+                    <XIcon className="h-4 w-4" />
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="mt-3 p-3 rounded-lg bg-muted/40 border border-border/40">
             <p className="text-xs text-muted-foreground">
