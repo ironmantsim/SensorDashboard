@@ -7,6 +7,66 @@ import { X, Mail, Lock, User, Eye, EyeOff, Loader2, ArrowLeft, CheckCircle2 } fr
 import logoImg from '@/assets/logo.png';
 import { toast } from 'sonner';
 
+// ── Field component defined OUTSIDE AuthModal to prevent re-mount on render ──
+interface FieldProps {
+  icon: React.ElementType;
+  placeholder: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  right?: React.ReactNode;
+  onEnter?: () => void;
+  maxLength?: number;
+  extraClass?: string;
+}
+
+function Field({
+  icon: Icon, placeholder, value, onChange, type = 'text', right, onEnter, maxLength, extraClass,
+}: FieldProps) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-border/50 bg-muted/20 hover:border-primary/40 focus-within:border-primary/60 transition-colors">
+      <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+      <input
+        type={type}
+        placeholder={placeholder}
+        value={value}
+        maxLength={maxLength}
+        onChange={e => onChange(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && onEnter?.()}
+        className={cn(
+          'flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none',
+          extraClass,
+        )}
+      />
+      {right}
+    </div>
+  );
+}
+
+// ── OTP code input (also outside) ──
+interface OtpFieldProps {
+  value: string;
+  onChange: (v: string) => void;
+  onEnter?: () => void;
+}
+
+function OtpField({ value, onChange, onEnter }: OtpFieldProps) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-border/50 bg-muted/20 hover:border-primary/40 focus-within:border-primary/60 transition-colors">
+      <span className="text-xs font-mono text-muted-foreground">CODE</span>
+      <input
+        type="text"
+        placeholder="4-digit code"
+        value={value}
+        maxLength={4}
+        onChange={e => onChange(e.target.value.replace(/\D/g, ''))}
+        onKeyDown={e => e.key === 'Enter' && onEnter?.()}
+        className="flex-1 bg-transparent text-sm font-mono tracking-widest text-foreground placeholder:text-muted-foreground outline-none text-center"
+      />
+    </div>
+  );
+}
+
 interface AuthModalProps {
   open: boolean;
   onClose: () => void;
@@ -43,7 +103,7 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
 
   const handleClose = () => { resetState(); onClose(); };
 
-  // ── Sign In ──────────────────────────────────────────────────────────
+  // ── Sign In ──
   const handleSignIn = async () => {
     if (!siEmail || !siPassword) return toast.error('Please fill in all fields');
     setLoading(true);
@@ -54,7 +114,7 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
     handleClose();
   };
 
-  // ── Sign Up step 1: send OTP ─────────────────────────────────────────
+  // ── Sign Up step 1: send OTP ──
   const handleSendOtp = async () => {
     if (!suEmail) return toast.error('Please enter your email');
     setLoading(true);
@@ -65,26 +125,23 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
     setLoading(false);
   };
 
-  // ── Sign Up step 2: verify OTP + set credentials ─────────────────────
+  // ── Sign Up step 2: verify OTP + set credentials ──
   const handleVerify = async () => {
     if (!suOtp || !suUsername || !suPassword) return toast.error('Please fill in all fields');
     if (suPassword.length < 6) return toast.error('Password must be at least 6 characters');
     setLoading(true);
 
-    // Verify OTP
     const { data: verifyData, error: verifyError } = await supabase.auth.verifyOtp({
       email: suEmail, token: suOtp, type: 'email',
     });
     if (verifyError) { toast.error(verifyError.message); setLoading(false); return; }
 
-    // Set password + username metadata
     const { data: updateData, error: updateError } = await supabase.auth.updateUser({
       password: suPassword,
       data: { username: suUsername },
     });
     if (updateError) { toast.error(updateError.message); setLoading(false); return; }
 
-    // Sync username to user_profiles
     await supabase
       .from('user_profiles')
       .update({ username: suUsername })
@@ -97,31 +154,10 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
 
   const switchTab = (t: Tab) => { setTab(t); setSuStep('email'); setShowPass(false); };
 
-  // ── Field wrapper ─────────────────────────────────────────────────────
-  const Field = ({
-    icon: Icon, placeholder, value, onChange, type = 'text', right,
-  }: {
-    icon: React.ElementType; placeholder: string; value: string;
-    onChange: (v: string) => void; type?: string; right?: React.ReactNode;
-  }) => (
-    <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-border/50 bg-muted/20 hover:border-primary/40 focus-within:border-primary/60 transition-colors">
-      <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-      <input
-        type={type}
-        placeholder={placeholder}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === 'Enter') {
-            if (tab === 'signin') handleSignIn();
-            else if (suStep === 'email') handleSendOtp();
-            else handleVerify();
-          }
-        }}
-        className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
-      />
-      {right}
-    </div>
+  const EyeToggle = (
+    <button onClick={() => setShowPass(p => !p)} className="text-muted-foreground hover:text-foreground flex-shrink-0">
+      {showPass ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+    </button>
   );
 
   return (
@@ -166,18 +202,22 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
         {/* ── SIGN IN ── */}
         {tab === 'signin' && (
           <div className="space-y-3">
-            <Field icon={Mail} placeholder="Email address" value={siEmail} onChange={setSiEmail} type="email" />
+            <Field
+              icon={Mail}
+              placeholder="Email address"
+              value={siEmail}
+              onChange={setSiEmail}
+              type="email"
+              onEnter={handleSignIn}
+            />
             <Field
               icon={Lock}
               placeholder="Password"
               value={siPassword}
               onChange={setSiPassword}
               type={showPass ? 'text' : 'password'}
-              right={
-                <button onClick={() => setShowPass(p => !p)} className="text-muted-foreground hover:text-foreground">
-                  {showPass ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                </button>
-              }
+              onEnter={handleSignIn}
+              right={EyeToggle}
             />
             <Button
               onClick={handleSignIn}
@@ -227,7 +267,14 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
 
             {suStep === 'email' ? (
               <>
-                <Field icon={Mail} placeholder="Email address" value={suEmail} onChange={setSuEmail} type="email" />
+                <Field
+                  icon={Mail}
+                  placeholder="Email address"
+                  value={suEmail}
+                  onChange={setSuEmail}
+                  type="email"
+                  onEnter={handleSendOtp}
+                />
                 <Button onClick={handleSendOtp} disabled={loading} className="w-full gap-2">
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   Send Verification Code
@@ -244,29 +291,22 @@ export function AuthModal({ open, onClose }: AuthModalProps) {
                 <p className="text-xs text-muted-foreground -mt-1 mb-2">
                   Code sent to <span className="text-foreground font-medium">{suEmail}</span>
                 </p>
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-border/50 bg-muted/20 focus-within:border-primary/60 transition-colors">
-                  <span className="text-xs font-mono text-muted-foreground">CODE</span>
-                  <input
-                    type="text"
-                    placeholder="4-digit code"
-                    value={suOtp}
-                    maxLength={4}
-                    onChange={e => setSuOtp(e.target.value.replace(/\D/g, ''))}
-                    className="flex-1 bg-transparent text-sm font-mono tracking-widest text-foreground placeholder:text-muted-foreground outline-none text-center"
-                  />
-                </div>
-                <Field icon={User} placeholder="Choose a username" value={suUsername} onChange={setSuUsername} />
+                <OtpField value={suOtp} onChange={setSuOtp} onEnter={handleVerify} />
+                <Field
+                  icon={User}
+                  placeholder="Choose a username"
+                  value={suUsername}
+                  onChange={setSuUsername}
+                  onEnter={handleVerify}
+                />
                 <Field
                   icon={Lock}
                   placeholder="Create password (min 6 chars)"
                   value={suPassword}
                   onChange={setSuPassword}
                   type={showPass ? 'text' : 'password'}
-                  right={
-                    <button onClick={() => setShowPass(p => !p)} className="text-muted-foreground hover:text-foreground">
-                      {showPass ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                    </button>
-                  }
+                  onEnter={handleVerify}
+                  right={EyeToggle}
                 />
                 <Button onClick={handleVerify} disabled={loading} className="w-full gap-2">
                   {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}

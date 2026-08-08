@@ -15,14 +15,32 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
   Circle, Square, Download, Trash2, FileJson, FileText,
-  Activity, Clock, Database, AlertCircle, MapPin, Battery,
-  Wifi, Navigation, Wind, SlidersHorizontal, Share2, Upload, Loader2, X as XIcon,
+  Activity, Clock, Database, AlertCircle,
+  SlidersHorizontal, Share2, Upload, Loader2, X as XIcon,
+  Zap, RotateCcw, Compass, MapPin, Battery, BatteryCharging,
+  Gauge, Sun, Wifi, Signal, Lock,
 } from 'lucide-react';
 
-type GroupId = 'motion' | 'location' | 'compass' | 'battery' | 'environment' | 'network';
+// ── Sensor ID type ─────────────────────────────────────────────────────────
+type SensorId =
+  | 'accel'
+  | 'gyro'
+  | 'orientation'
+  | 'gps'
+  | 'magnetometer'
+  | 'battery_level'
+  | 'battery_charging'
+  | 'barometer'
+  | 'ambient_light'
+  | 'network_type'
+  | 'network_speed';
 
-const SENSOR_GROUPS: {
-  id: GroupId;
+// ── Sensor permission states ───────────────────────────────────────────────
+type PermState = 'granted' | 'denied' | 'unknown' | 'unsupported';
+
+// ── Sensor definition ──────────────────────────────────────────────────────
+interface SensorDef {
+  id: SensorId;
   label: string;
   desc: string;
   icon: React.ElementType;
@@ -30,69 +48,149 @@ const SENSOR_GROUPS: {
   bg: string;
   activeBorder: string;
   trackBg: string;
-}[] = [
+  group: string;
+  /** fields this sensor records */
+  fields: string[];
+}
+
+const SENSORS: SensorDef[] = [
   {
-    id: 'motion',
-    label: 'Motion',
-    desc: 'Accel, Gyro & Orientation',
-    icon: Activity,
-    color: 'text-violet-500',
+    id: 'accel',
+    label: 'Accelerometer',
+    desc: 'accel_x · accel_y · accel_z',
+    icon: Zap,
+    color: 'text-violet-400',
     bg: 'bg-violet-500/10',
     activeBorder: 'border-violet-500/40',
     trackBg: 'bg-violet-500',
+    group: 'Motion',
+    fields: ['accel_x', 'accel_y', 'accel_z'],
   },
   {
-    id: 'location',
+    id: 'gyro',
+    label: 'Gyroscope',
+    desc: 'gyro_x · gyro_y · gyro_z',
+    icon: RotateCcw,
+    color: 'text-purple-400',
+    bg: 'bg-purple-500/10',
+    activeBorder: 'border-purple-500/40',
+    trackBg: 'bg-purple-500',
+    group: 'Motion',
+    fields: ['gyro_x', 'gyro_y', 'gyro_z'],
+  },
+  {
+    id: 'orientation',
+    label: 'Orientation',
+    desc: 'alpha · beta · gamma',
+    icon: Activity,
+    color: 'text-fuchsia-400',
+    bg: 'bg-fuchsia-500/10',
+    activeBorder: 'border-fuchsia-500/40',
+    trackBg: 'bg-fuchsia-500',
+    group: 'Motion',
+    fields: ['orientation_alpha', 'orientation_beta', 'orientation_gamma'],
+  },
+  {
+    id: 'gps',
     label: 'GPS Location',
-    desc: 'Lat, Lng, Accuracy & Speed',
+    desc: 'lat · lng · accuracy · speed',
     icon: MapPin,
-    color: 'text-emerald-500',
+    color: 'text-emerald-400',
     bg: 'bg-emerald-500/10',
     activeBorder: 'border-emerald-500/40',
     trackBg: 'bg-emerald-500',
+    group: 'Location',
+    fields: ['gps_lat', 'gps_lng', 'gps_accuracy', 'gps_speed'],
   },
   {
-    id: 'compass',
-    label: 'Compass',
-    desc: 'Magnetometer heading',
-    icon: Navigation,
-    color: 'text-blue-500',
+    id: 'magnetometer',
+    label: 'Magnetometer',
+    desc: 'compass_heading (0–360°)',
+    icon: Compass,
+    color: 'text-blue-400',
     bg: 'bg-blue-500/10',
     activeBorder: 'border-blue-500/40',
     trackBg: 'bg-blue-500',
+    group: 'Location',
+    fields: ['compass_heading'],
   },
   {
-    id: 'battery',
-    label: 'Battery',
-    desc: 'Level & charging state',
+    id: 'battery_level',
+    label: 'Battery Level',
+    desc: 'battery_level (%)',
     icon: Battery,
-    color: 'text-yellow-500',
+    color: 'text-yellow-400',
     bg: 'bg-yellow-500/10',
     activeBorder: 'border-yellow-500/40',
     trackBg: 'bg-yellow-500',
+    group: 'System',
+    fields: ['battery_level'],
   },
   {
-    id: 'environment',
-    label: 'Environment',
-    desc: 'Pressure & ambient light',
-    icon: Wind,
-    color: 'text-orange-500',
+    id: 'battery_charging',
+    label: 'Charging State',
+    desc: 'battery_charging (bool)',
+    icon: BatteryCharging,
+    color: 'text-lime-400',
+    bg: 'bg-lime-500/10',
+    activeBorder: 'border-lime-500/40',
+    trackBg: 'bg-lime-500',
+    group: 'System',
+    fields: ['battery_charging'],
+  },
+  {
+    id: 'barometer',
+    label: 'Barometer',
+    desc: 'pressure_hpa (hPa)',
+    icon: Gauge,
+    color: 'text-orange-400',
     bg: 'bg-orange-500/10',
     activeBorder: 'border-orange-500/40',
     trackBg: 'bg-orange-500',
+    group: 'Environment',
+    fields: ['pressure_hpa'],
   },
   {
-    id: 'network',
-    label: 'Network',
-    desc: 'Connection type & speed',
+    id: 'ambient_light',
+    label: 'Ambient Light',
+    desc: 'light_lux (lux)',
+    icon: Sun,
+    color: 'text-amber-400',
+    bg: 'bg-amber-500/10',
+    activeBorder: 'border-amber-500/40',
+    trackBg: 'bg-amber-500',
+    group: 'Environment',
+    fields: ['light_lux'],
+  },
+  {
+    id: 'network_type',
+    label: 'Network Type',
+    desc: 'network_type (wifi/4g/…)',
     icon: Wifi,
-    color: 'text-cyan-500',
+    color: 'text-cyan-400',
     bg: 'bg-cyan-500/10',
     activeBorder: 'border-cyan-500/40',
     trackBg: 'bg-cyan-500',
+    group: 'Network',
+    fields: ['network_type'],
+  },
+  {
+    id: 'network_speed',
+    label: 'Network Speed',
+    desc: 'network_effective (2g/3g/4g)',
+    icon: Signal,
+    color: 'text-sky-400',
+    bg: 'bg-sky-500/10',
+    activeBorder: 'border-sky-500/40',
+    trackBg: 'bg-sky-500',
+    group: 'Network',
+    fields: ['network_effective'],
   },
 ];
 
+const GROUPS = ['Motion', 'Location', 'System', 'Environment', 'Network'];
+
+// ── Helpers ────────────────────────────────────────────────────────────────
 function formatElapsed(ms: number): string {
   const s = Math.floor(ms / 1000);
   const m = Math.floor(s / 60);
@@ -101,10 +199,13 @@ function formatElapsed(ms: number): string {
   return `${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
 }
 
+// ── Component ──────────────────────────────────────────────────────────────
 export function RecordingSection() {
   const rec = useRecording();
   const { user } = useAuth();
-  const { motionData } = useMotionSensors();
+
+  // Sensor hooks
+  const { motionData, hasPermission: motionPerm } = useMotionSensors();
   const { locationData } = useLocation();
   const battery = useBattery();
   const { networkData } = useNetwork();
@@ -112,52 +213,112 @@ export function RecordingSection() {
   const baro = useBarometer();
   const compass = useMagnetometer();
 
-  const [enabledGroups, setEnabledGroups] = useState<Record<GroupId, boolean>>({
-    motion: true,
-    location: true,
-    compass: true,
-    battery: true,
-    environment: true,
-    network: true,
+  // ── Per-sensor enabled state ──
+  const [enabled, setEnabled] = useState<Record<SensorId, boolean>>({
+    accel: true,
+    gyro: true,
+    orientation: true,
+    gps: true,
+    magnetometer: true,
+    battery_level: true,
+    battery_charging: true,
+    barometer: true,
+    ambient_light: true,
+    network_type: true,
+    network_speed: true,
   });
 
-  const toggleGroup = (id: GroupId) => {
+  const toggle = (id: SensorId) => {
     if (rec.isRecording) return;
-    setEnabledGroups(prev => ({ ...prev, [id]: !prev[id] }));
+    setEnabled(prev => ({ ...prev, [id]: !prev[id] }));
   };
 
   const selectAll = () =>
-    setEnabledGroups({ motion: true, location: true, compass: true, battery: true, environment: true, network: true });
+    setEnabled(Object.fromEntries(SENSORS.map(s => [s.id, true])) as Record<SensorId, boolean>);
   const clearAll = () =>
-    setEnabledGroups({ motion: false, location: false, compass: false, battery: false, environment: false, network: false });
+    setEnabled(Object.fromEntries(SENSORS.map(s => [s.id, false])) as Record<SensorId, boolean>);
 
-  const selectedCount = Object.values(enabledGroups).filter(Boolean).length;
+  // ── Derive permission state for each sensor ──
+  const permState = (id: SensorId): PermState => {
+    switch (id) {
+      case 'accel':
+      case 'gyro':
+      case 'orientation':
+        if (motionPerm === false) return 'denied';
+        if (
+          motionData.accelerometer.x !== null ||
+          motionData.gyroscope.x !== null ||
+          motionData.orientation.alpha !== null
+        ) return 'granted';
+        return 'unknown';
+      case 'gps': {
+        if (!locationData.error) {
+          if (locationData.latitude !== null) return 'granted';
+          return 'unknown';
+        }
+        const msg = locationData.error.toLowerCase();
+        if (msg.includes('denied') || msg.includes('permission')) return 'denied';
+        return 'unknown';
+      }
+      case 'magnetometer':
+        if (compass.hasPermission === false) return 'denied';
+        if (!compass.supported) return 'unsupported';
+        if (compass.heading !== null) return 'granted';
+        return 'unknown';
+      case 'battery_level':
+      case 'battery_charging':
+        if (!battery.supported) return 'unsupported';
+        return battery.level !== null ? 'granted' : 'unknown';
+      case 'barometer':
+        if (!baro.supported) return 'unsupported';
+        if (baro.hasPermission === false) return 'denied';
+        if (baro.pressure !== null) return 'granted';
+        return 'unknown';
+      case 'ambient_light':
+        if (!light.supported) return 'unsupported';
+        if (light.hasPermission === false) return 'denied';
+        if (light.value !== null) return 'granted';
+        return 'unknown';
+      case 'network_type':
+      case 'network_speed':
+        return networkData.type !== null ? 'granted' : 'unknown';
+      default:
+        return 'unknown';
+    }
+  };
 
+  const isBlocked = (id: SensorId) => {
+    const p = permState(id);
+    return p === 'denied' || p === 'unsupported';
+  };
+
+  // ── Register data getter ──
   useEffect(() => {
     rec.registerDataGetter(() => ({
-      accel_x: enabledGroups.motion ? motionData.accelerometer.x : null,
-      accel_y: enabledGroups.motion ? motionData.accelerometer.y : null,
-      accel_z: enabledGroups.motion ? motionData.accelerometer.z : null,
-      gyro_x: enabledGroups.motion ? motionData.gyroscope.x : null,
-      gyro_y: enabledGroups.motion ? motionData.gyroscope.y : null,
-      gyro_z: enabledGroups.motion ? motionData.gyroscope.z : null,
-      orientation_alpha: enabledGroups.motion ? motionData.orientation.alpha : null,
-      orientation_beta: enabledGroups.motion ? motionData.orientation.beta : null,
-      orientation_gamma: enabledGroups.motion ? motionData.orientation.gamma : null,
-      gps_lat: enabledGroups.location ? locationData.latitude : null,
-      gps_lng: enabledGroups.location ? locationData.longitude : null,
-      gps_accuracy: enabledGroups.location ? locationData.accuracy : null,
-      gps_speed: enabledGroups.location ? locationData.speed : null,
-      compass_heading: enabledGroups.compass ? compass.heading : null,
-      battery_level: enabledGroups.battery ? battery.level : null,
-      battery_charging: enabledGroups.battery ? battery.charging : null,
-      pressure_hpa: enabledGroups.environment ? baro.pressure : null,
-      light_lux: enabledGroups.environment ? light.value : null,
-      network_type: enabledGroups.network ? networkData.type : null,
-      network_effective: enabledGroups.network ? networkData.effectiveType : null,
+      accel_x: enabled.accel ? motionData.accelerometer.x : null,
+      accel_y: enabled.accel ? motionData.accelerometer.y : null,
+      accel_z: enabled.accel ? motionData.accelerometer.z : null,
+      gyro_x: enabled.gyro ? motionData.gyroscope.x : null,
+      gyro_y: enabled.gyro ? motionData.gyroscope.y : null,
+      gyro_z: enabled.gyro ? motionData.gyroscope.z : null,
+      orientation_alpha: enabled.orientation ? motionData.orientation.alpha : null,
+      orientation_beta: enabled.orientation ? motionData.orientation.beta : null,
+      orientation_gamma: enabled.orientation ? motionData.orientation.gamma : null,
+      gps_lat: enabled.gps ? locationData.latitude : null,
+      gps_lng: enabled.gps ? locationData.longitude : null,
+      gps_accuracy: enabled.gps ? locationData.accuracy : null,
+      gps_speed: enabled.gps ? locationData.speed : null,
+      compass_heading: enabled.magnetometer ? compass.heading : null,
+      battery_level: enabled.battery_level ? battery.level : null,
+      battery_charging: enabled.battery_charging ? battery.charging : null,
+      pressure_hpa: enabled.barometer ? baro.pressure : null,
+      light_lux: enabled.ambient_light ? light.value : null,
+      network_type: enabled.network_type ? networkData.type : null,
+      network_effective: enabled.network_speed ? networkData.effectiveType : null,
     }));
-  }, [motionData, locationData, battery, networkData, light, baro, compass, enabledGroups]);
+  }, [motionData, locationData, battery, networkData, light, baro, compass, enabled]);
 
+  // ── Share state ──
   const [shareTitle, setShareTitle] = useState('');
   const [showShareForm, setShowShareForm] = useState(false);
   const [sharing, setSharing] = useState(false);
@@ -165,13 +326,14 @@ export function RecordingSection() {
   const handleShare = async () => {
     if (!user || !shareTitle.trim()) return;
     setSharing(true);
+    const activeGroups = [...new Set(SENSORS.filter(s => enabled[s.id]).map(s => s.group))];
     const { error } = await supabase
       .from('shared_recordings')
       .insert({
         owner_id: user.id,
         title: shareTitle.trim(),
         data: rec.rows,
-        sensor_groups: SENSOR_GROUPS.filter(g => enabledGroups[g.id]).map(g => g.label),
+        sensor_groups: activeGroups,
         sample_count: rec.rows.length,
         duration_ms: rec.elapsed,
       });
@@ -185,8 +347,21 @@ export function RecordingSection() {
     setSharing(false);
   };
 
+  const selectedCount = Object.values(enabled).filter(Boolean).length;
   const hasData = rec.rows.length > 0;
-  const activeGroupLabels = SENSOR_GROUPS.filter(g => enabledGroups[g.id]).map(g => g.label).join(', ');
+
+  // Group sensors for grouped display
+  const groupedSensors = GROUPS.map(group => ({
+    group,
+    sensors: SENSORS.filter(s => s.group === group),
+  }));
+
+  const permLabel = (state: PermState) => {
+    if (state === 'granted') return null;
+    if (state === 'denied') return 'Permission denied';
+    if (state === 'unsupported') return 'Not supported';
+    return null;
+  };
 
   return (
     <div className="space-y-4">
@@ -201,72 +376,100 @@ export function RecordingSection() {
       >
         <p className="text-xs text-muted-foreground mb-3">
           {rec.isRecording
-            ? 'Sensor groups are locked during an active recording.'
-            : 'Toggle the sensor groups you want to capture in this session.'}
+            ? 'Sensor selection is locked while recording is active.'
+            : 'Toggle individual sensors. Blurred sensors require permission or are unsupported on this device.'}
         </p>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          {SENSOR_GROUPS.map(group => {
-            const Icon = group.icon;
-            const enabled = enabledGroups[group.id];
-            return (
-              <button
-                key={group.id}
-                onClick={() => toggleGroup(group.id)}
-                disabled={rec.isRecording}
-                className={cn(
-                  'relative flex items-start gap-2 p-3 rounded-xl border text-left transition-all duration-200 select-none',
-                  enabled
-                    ? `${group.bg} ${group.activeBorder}`
-                    : 'bg-muted/20 border-border/40 opacity-55',
-                  !rec.isRecording
-                    ? 'hover:scale-[1.02] cursor-pointer active:scale-[0.99]'
-                    : 'cursor-not-allowed'
-                )}
-              >
-                {/* Icon bubble */}
-                <div className={cn(
-                  'w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors',
-                  enabled ? group.bg : 'bg-muted/60'
-                )}>
-                  <Icon className={cn('h-3.5 w-3.5', enabled ? group.color : 'text-muted-foreground/50')} />
-                </div>
+        <div className="space-y-4">
+          {groupedSensors.map(({ group, sensors }) => (
+            <div key={group}>
+              {/* Group header */}
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-px flex-1 bg-border/40" />
+                <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider px-1">
+                  {group}
+                </span>
+                <div className="h-px flex-1 bg-border/40" />
+              </div>
 
-                {/* Text */}
-                <div className="flex-1 min-w-0">
-                  <div className={cn(
-                    'text-xs font-semibold leading-tight',
-                    enabled ? 'text-foreground' : 'text-muted-foreground'
-                  )}>
-                    {group.label}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5 leading-snug">
-                    {group.desc}
-                  </div>
-                </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {sensors.map(sensor => {
+                  const Icon = sensor.icon;
+                  const isOn = enabled[sensor.id];
+                  const pState = permState(sensor.id);
+                  const blocked = isBlocked(sensor.id);
+                  const pMsg = permLabel(pState);
 
-                {/* Mini toggle switch */}
-                <div className={cn(
-                  'flex-shrink-0 w-8 h-4 rounded-full transition-colors duration-200 mt-1',
-                  enabled ? group.trackBg : 'bg-muted-foreground/25'
-                )}>
-                  <div className={cn(
-                    'w-3 h-3 rounded-full bg-white shadow mt-0.5 transition-transform duration-200',
-                    enabled ? 'translate-x-4' : 'translate-x-0.5'
-                  )} />
-                </div>
-              </button>
-            );
-          })}
+                  return (
+                    <button
+                      key={sensor.id}
+                      onClick={() => !blocked && toggle(sensor.id)}
+                      disabled={rec.isRecording}
+                      className={cn(
+                        'relative flex items-center gap-3 p-3 rounded-xl border text-left transition-all duration-200 select-none w-full',
+                        blocked
+                          ? 'opacity-40 blur-[0.5px] cursor-not-allowed bg-muted/10 border-border/30 grayscale'
+                          : isOn
+                            ? `${sensor.bg} ${sensor.activeBorder} cursor-pointer hover:scale-[1.01] active:scale-[0.99]`
+                            : 'bg-muted/20 border-border/40 opacity-60 cursor-pointer hover:opacity-80',
+                        rec.isRecording && !blocked && 'cursor-not-allowed',
+                      )}
+                    >
+                      {/* Icon */}
+                      <div className={cn(
+                        'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors',
+                        blocked ? 'bg-muted/60' : isOn ? sensor.bg : 'bg-muted/40'
+                      )}>
+                        {blocked
+                          ? <Lock className="h-3.5 w-3.5 text-muted-foreground/50" />
+                          : <Icon className={cn('h-3.5 w-3.5', isOn ? sensor.color : 'text-muted-foreground/50')} />
+                        }
+                      </div>
+
+                      {/* Text */}
+                      <div className="flex-1 min-w-0">
+                        <div className={cn(
+                          'text-xs font-semibold leading-tight',
+                          blocked ? 'text-muted-foreground/60' : isOn ? 'text-foreground' : 'text-muted-foreground'
+                        )}>
+                          {sensor.label}
+                        </div>
+                        {pMsg ? (
+                          <div className="text-[10px] text-red-400/80 mt-0.5">{pMsg}</div>
+                        ) : (
+                          <div className="text-[10px] text-muted-foreground mt-0.5 leading-snug font-mono">
+                            {sensor.desc}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Toggle switch */}
+                      {!blocked && (
+                        <div className={cn(
+                          'flex-shrink-0 w-8 h-4 rounded-full transition-colors duration-200',
+                          isOn ? sensor.trackBg : 'bg-muted-foreground/25'
+                        )}>
+                          <div className={cn(
+                            'w-3 h-3 rounded-full bg-white shadow mt-0.5 transition-transform duration-200',
+                            isOn ? 'translate-x-4' : 'translate-x-0.5'
+                          )} />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* Footer row */}
-        <div className="mt-3 pt-3 border-t border-border/40 flex items-center justify-between">
+        <div className="mt-4 pt-3 border-t border-border/40 flex items-center justify-between">
           <span className="text-xs text-muted-foreground">
             <span className={cn('font-medium', selectedCount > 0 ? 'text-foreground' : 'text-amber-500')}>
               {selectedCount}
             </span>
-            {' '}/ {SENSOR_GROUPS.length} groups selected
+            {' '}/ {SENSORS.length} sensors selected
           </span>
           {!rec.isRecording && (
             <div className="flex gap-3 text-xs">
@@ -304,7 +507,7 @@ export function RecordingSection() {
               </div>
               <div className="text-xs text-muted-foreground flex items-center gap-1.5">
                 <Database className="h-3 w-3" />
-                {rec.rows.length} samples · {selectedCount} sensor {selectedCount === 1 ? 'group' : 'groups'}
+                {rec.rows.length} samples · {selectedCount} sensor{selectedCount !== 1 ? 's' : ''} active
               </div>
             </div>
           </div>
@@ -350,7 +553,7 @@ export function RecordingSection() {
           <Clock className="h-3.5 w-3.5 flex-shrink-0" />
           Sampling at 2 Hz (every 500 ms)
           {selectedCount === 0 && (
-            <span className="text-amber-500 font-medium">— select at least one sensor group above</span>
+            <span className="text-amber-500 font-medium">— select at least one sensor above</span>
           )}
         </div>
       </SensorCard>
@@ -437,7 +640,8 @@ export function RecordingSection() {
           <div className="mt-3 p-3 rounded-lg bg-muted/40 border border-border/40">
             <p className="text-xs text-muted-foreground">
               <span className="font-medium text-foreground">{rec.rows.length} rows</span>
-              {activeGroupLabels && <> · Groups: {activeGroupLabels}</>}
+              {' · '}
+              <span className="font-medium text-foreground">{selectedCount}</span> active sensors
             </p>
           </div>
         </SensorCard>
@@ -489,13 +693,13 @@ export function RecordingSection() {
           <div>
             <p className="text-sm font-medium text-foreground">No recording yet</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Pick your sensor groups above then press <span className="font-medium text-foreground">Start Recording</span>
+              Pick your sensors above then press <span className="font-medium text-foreground">Start Recording</span>
             </p>
           </div>
           {selectedCount === 0 && (
             <div className="flex items-center gap-2 text-xs text-amber-500">
               <AlertCircle className="h-3.5 w-3.5" />
-              No sensor groups selected
+              No sensors selected
             </div>
           )}
         </div>
