@@ -23,6 +23,14 @@ export interface RecordingRow {
   light_lux: number | null;
   network_type: string | null;
   network_effective: string | null;
+  network_downlink: number | null;
+  network_rtt: number | null;
+  mic_level: number | null;
+  cam_active: boolean | null;
+  device_os: string | null;
+  device_browser: string | null;
+  device_memory_gb: number | null;
+  device_cpu_cores: number | null;
 }
 
 export interface RecordingState {

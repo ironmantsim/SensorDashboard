@@ -294,8 +294,8 @@ export function AccountSection({ onOpenAuth }: AccountSectionProps) {
 
       {/* Find Users */}
       <SensorCard title="Find Users" icon={<Search className="h-4 w-4 text-cyan-400" />}>
-        <div className="flex gap-2">
-          <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-xl border border-border/50 bg-muted/20 focus-within:border-primary/50 transition-colors">
+        <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-xl border border-border/50 bg-muted/20 focus-within:border-primary/50 transition-colors min-w-0">
             <Search className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
             <input
               type="text"
@@ -303,18 +303,18 @@ export function AccountSection({ onOpenAuth }: AccountSectionProps) {
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSearch()}
-              className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+              className="flex-1 min-w-0 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
             />
             {searchQuery && (
               <button
                 onClick={() => { setSearchQuery(''); setSearchResults([]); }}
-                className="text-muted-foreground hover:text-foreground"
+                className="text-muted-foreground hover:text-foreground flex-shrink-0"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
             )}
           </div>
-          <Button size="sm" onClick={handleSearch} className="gap-1.5 flex-shrink-0">
+          <Button size="sm" onClick={handleSearch} className="gap-1.5 w-full sm:w-auto sm:flex-shrink-0">
             <Search className="h-3.5 w-3.5" /> Search
           </Button>
         </div>
