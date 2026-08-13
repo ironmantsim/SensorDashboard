@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import {
   LayoutDashboard, Cpu, MapPin, Thermometer, Battery,
   Mic, Camera, Wifi, Monitor, ShieldCheck, CheckCircle,
-  BarChart2, X, Circle, Info, UserCircle2, LogIn,
+  BarChart2, X, Circle, Info, UserCircle2, LogIn, Users, Star,
 } from 'lucide-react';
 
 interface NavItem {
@@ -12,23 +12,25 @@ interface NavItem {
   label: string;
   icon: React.ElementType;
   color: string;
+  proOnly?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, color: 'text-primary' },
-  { id: 'motion', label: 'Motion', icon: Cpu, color: 'text-violet-500' },
-  { id: 'location', label: 'Location & GPS', icon: MapPin, color: 'text-emerald-500' },
-  { id: 'environment', label: 'Environment', icon: Thermometer, color: 'text-orange-500' },
-  { id: 'battery', label: 'Battery', icon: Battery, color: 'text-yellow-500' },
-  { id: 'audio', label: 'Audio', icon: Mic, color: 'text-pink-500' },
-  { id: 'camera', label: 'Camera', icon: Camera, color: 'text-blue-500' },
-  { id: 'network', label: 'Network', icon: Wifi, color: 'text-cyan-500' },
-  { id: 'device', label: 'Device Info', icon: Monitor, color: 'text-indigo-500' },
-  { id: 'permissions', label: 'Permissions', icon: ShieldCheck, color: 'text-teal-500' },
-  { id: 'status', label: 'Sensor Status', icon: CheckCircle, color: 'text-green-500' },
-  { id: 'visualization', label: 'Visualization', icon: BarChart2, color: 'text-rose-500' },
-  { id: 'recording', label: 'Recording', icon: Circle, color: 'text-red-500' },
-  { id: 'about', label: 'About', icon: Info, color: 'text-primary' },
+  { id: 'dashboard',     label: 'Dashboard',     icon: LayoutDashboard, color: 'text-primary' },
+  { id: 'motion',        label: 'Motion',         icon: Cpu,             color: 'text-violet-500' },
+  { id: 'location',      label: 'Location & GPS', icon: MapPin,          color: 'text-emerald-500' },
+  { id: 'environment',   label: 'Environment',    icon: Thermometer,     color: 'text-orange-500' },
+  { id: 'battery',       label: 'Battery',        icon: Battery,         color: 'text-yellow-500' },
+  { id: 'audio',         label: 'Audio',          icon: Mic,             color: 'text-pink-500' },
+  { id: 'camera',        label: 'Camera',         icon: Camera,          color: 'text-blue-500' },
+  { id: 'network',       label: 'Network',        icon: Wifi,            color: 'text-cyan-500' },
+  { id: 'device',        label: 'Device Info',    icon: Monitor,         color: 'text-indigo-500' },
+  { id: 'permissions',   label: 'Permissions',    icon: ShieldCheck,     color: 'text-teal-500' },
+  { id: 'status',        label: 'Sensor Status',  icon: CheckCircle,     color: 'text-green-500' },
+  { id: 'visualization', label: 'Visualization',  icon: BarChart2,       color: 'text-rose-500' },
+  { id: 'recording',     label: 'Recording',      icon: Circle,          color: 'text-red-500' },
+  { id: 'group',         label: 'Group',          icon: Users,           color: 'text-violet-500' },
+  { id: 'about',         label: 'About',          icon: Info,            color: 'text-primary' },
 ];
 
 interface SidebarProps {
@@ -49,22 +51,17 @@ export function Sidebar({ activeSection, onNavigate, open, onClose, onOpenAuth }
 
   return (
     <>
-      {/* Overlay */}
       {open && (
-        <div
-          className="fixed inset-0 z-40 bg-black/50 lg:hidden"
-          onClick={onClose}
-        />
+        <div className="fixed inset-0 z-40 bg-black/50 lg:hidden" onClick={onClose} />
       )}
 
-      {/* Sidebar */}
       <aside className={cn(
         'fixed top-0 left-0 z-40 h-full w-60 bg-sidebar flex flex-col border-r border-sidebar-border transition-transform duration-200 ease-in-out',
         'pt-14',
         open ? 'translate-x-0' : '-translate-x-full',
         'lg:translate-x-0 lg:static lg:z-auto lg:h-auto lg:pt-0'
       )}>
-        {/* Mobile close button */}
+        {/* Mobile close */}
         <div className="flex items-center justify-between px-4 py-3 lg:hidden border-b border-sidebar-border">
           <span className="text-sm font-semibold text-sidebar-foreground">Navigation</span>
           <button onClick={onClose} className="text-sidebar-foreground/60 hover:text-sidebar-foreground">
@@ -72,7 +69,7 @@ export function Sidebar({ activeSection, onNavigate, open, onClose, onOpenAuth }
           </button>
         </div>
 
-        {/* Auth button / Profile card at top */}
+        {/* Auth / Profile card */}
         <div className="px-2 pt-3 pb-2 border-b border-sidebar-border">
           {authLoading ? (
             <div className="h-9 rounded-lg bg-muted/30 animate-pulse" />
@@ -86,13 +83,29 @@ export function Sidebar({ activeSection, onNavigate, open, onClose, onOpenAuth }
                   : 'hover:bg-sidebar-accent'
               )}
             >
-              <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center flex-shrink-0">
-                <span className="text-sm font-bold text-primary">
-                  {user.username.slice(0, 1).toUpperCase()}
-                </span>
-              </div>
+              {/* Avatar */}
+              {user.avatarUrl ? (
+                <img
+                  src={user.avatarUrl}
+                  alt="avatar"
+                  className="w-8 h-8 rounded-full object-cover border border-primary/30 flex-shrink-0"
+                />
+              ) : (
+                <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center flex-shrink-0">
+                  <span className="text-sm font-bold text-primary">
+                    {user.username.slice(0, 1).toUpperCase()}
+                  </span>
+                </div>
+              )}
               <div className="flex-1 min-w-0">
-                <div className="text-xs font-semibold text-sidebar-foreground truncate">{user.username}</div>
+                <div className="flex items-center gap-1">
+                  <span className="text-xs font-semibold text-sidebar-foreground truncate">{user.username}</span>
+                  {user.plan === 'pro' && (
+                    <span className="flex-shrink-0 flex items-center gap-0.5 text-[9px] font-bold text-amber-500 bg-amber-500/10 px-1 py-0.5 rounded">
+                      <Star className="h-2 w-2 fill-amber-500" />PRO
+                    </span>
+                  )}
+                </div>
                 <div className="flex items-center gap-1">
                   <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
                   <span className="text-[10px] text-sidebar-foreground/50">Online · Account</span>
@@ -128,9 +141,7 @@ export function Sidebar({ activeSection, onNavigate, open, onClose, onOpenAuth }
               >
                 <Icon className={cn('h-4 w-4 flex-shrink-0', isActive ? item.color : 'text-current')} />
                 <span className="text-sm truncate">{item.label}</span>
-                {isActive && (
-                  <div className="ml-auto w-1 h-4 rounded-full bg-sidebar-primary" />
-                )}
+                {isActive && <div className="ml-auto w-1 h-4 rounded-full bg-sidebar-primary" />}
               </button>
             );
           })}
@@ -138,7 +149,7 @@ export function Sidebar({ activeSection, onNavigate, open, onClose, onOpenAuth }
 
         <div className="p-3 border-t border-sidebar-border">
           <div className="text-[10px] text-sidebar-foreground/40 text-center">
-            Browser API Sensor Monitor v1.0
+            Sensor Dashboard v1.0
           </div>
         </div>
       </aside>

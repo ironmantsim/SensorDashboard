@@ -1,583 +1,432 @@
-import { useState, useEffect } from 'react';
+import { useState, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
 import { SensorCard } from '@/components/features/SensorCard';
+import { useConfirm } from '@/components/ui/ConfirmDialog';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import {
-  UserCircle2, LogOut, Search, UserPlus, UserCheck, UserX,
-  Clock, Download, Trash2, RefreshCw, Users, Cloud,
-  Activity, Info, CheckCircle2, X, Loader2,
+  UserCircle2, LogOut, Lock, User, Eye, EyeOff, Loader2,
+  Star, Zap, Shield, CheckCircle2, Camera, Trash2,
+  ArrowUpRight, ArrowDownLeft, X,
 } from 'lucide-react';
-
-interface Profile {
-  id: string;
-  username: string | null;
-  email: string;
-  last_seen: string | null;
-}
-
-interface FriendReq {
-  id: string;
-  sender_id: string;
-  receiver_id: string;
-  status: string;
-  created_at: string;
-  sender: Profile | null;
-  receiver: Profile | null;
-}
-
-interface CloudRecording {
-  id: string;
-  owner_id?: string;
-  title: string;
-  sensor_groups: string[] | null;
-  sample_count: number;
-  duration_ms: number;
-  created_at: string;
-  owner?: Profile | null;
-}
-
-const isOnline = (lastSeen: string | null) =>
-  !!lastSeen && Date.now() - new Date(lastSeen).getTime() < 3 * 60 * 1000;
-
-const formatDuration = (ms: number) => {
-  const s = Math.floor(ms / 1000);
-  const m = Math.floor(s / 60);
-  return m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
-};
-
-const formatDate = (d: string) =>
-  new Date(d).toLocaleDateString(undefined, {
-    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
-  });
-
-const initials = (name: string | null | undefined, email: string) =>
-  ((name || email).slice(0, 1).toUpperCase());
+import logoImg from '@/assets/logo.png';
 
 interface AccountSectionProps {
   onOpenAuth: () => void;
 }
 
+// ── Field (outside to prevent remount) ────────────────────────────────────────
+interface FieldProps {
+  icon: React.ElementType;
+  placeholder: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  right?: React.ReactNode;
+  autoFocus?: boolean;
+}
+function Field({ icon: Icon, placeholder, value, onChange, type = 'text', right, autoFocus }: FieldProps) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-border/50 bg-muted/20 hover:border-primary/40 focus-within:border-primary/60 transition-colors">
+      <Icon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+      <input
+        type={type}
+        placeholder={placeholder}
+        value={value}
+        autoFocus={autoFocus}
+        onChange={e => onChange(e.target.value)}
+        className="flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
+      />
+      {right}
+    </div>
+  );
+}
+
+// ── Plan Feature List ──────────────────────────────────────────────────────────
+function PlanFeatures({ plan }: { plan: 'normal' | 'pro' }) {
+  const normalFeatures = [
+    'All sensors & real-time monitoring',
+    'Local recording storage',
+    'Up to 10 group shares',
+    'One device per account',
+  ];
+  const proFeatures = [
+    'Everything in Normal',
+    'Profile picture',
+    'Cloud recording sync (any device)',
+    'Resume past recordings',
+    'View friends\' live sensor data',
+    'Unlimited group shares',
+  ];
+  const features = plan === 'pro' ? proFeatures : normalFeatures;
+  return (
+    <ul className="space-y-1.5 mt-2">
+      {features.map((f, i) => (
+        <li key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+          <CheckCircle2 className={cn('h-3 w-3 flex-shrink-0 mt-0.5', plan === 'pro' ? 'text-amber-500' : 'text-primary')} />
+          {f}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function AccountSection({ onOpenAuth }: AccountSectionProps) {
-  const { user, signOut, loading: authLoading } = useAuth();
+  const { user, signOut, refreshUser, loading: authLoading } = useAuth();
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
-  const [requests, setRequests] = useState<FriendReq[]>([]);
-  const [myRecordings, setMyRecordings] = useState<CloudRecording[]>([]);
-  const [friendRecordings, setFriendRecordings] = useState<CloudRecording[]>([]);
-  const [searchResults, setSearchResults] = useState<Profile[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [loadingData, setLoadingData] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
+  // Edit states
+  const [editUsername, setEditUsername] = useState('');
+  const [showUsernameEdit, setShowUsernameEdit] = useState(false);
+  const [showPasswordEdit, setShowPasswordEdit] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPass, setShowPass] = useState(false);
+  const [savingUsername, setSavingUsername] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
+  const [savingPlan, setSavingPlan] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement | null>(null);
 
-  const loadAll = async () => {
+  const handleSaveUsername = async () => {
+    if (!editUsername.trim() || !user) return;
+    const ok = await confirm({
+      title: 'Change Username?',
+      description: `Your username will be changed to "${editUsername.trim()}".`,
+      confirmLabel: 'Change',
+    });
+    if (!ok) return;
+    setSavingUsername(true);
+    await supabase.auth.updateUser({ data: { username: editUsername.trim() } });
+    await supabase.from('user_profiles').update({ username: editUsername.trim() }).eq('id', user.id);
+    await refreshUser();
+    toast.success('Username updated!');
+    setShowUsernameEdit(false);
+    setEditUsername('');
+    setSavingUsername(false);
+  };
+
+  const handleSavePassword = async () => {
+    if (!newPassword || !confirmPassword) return toast.error('Fill in all fields');
+    if (newPassword.length < 6) return toast.error('Password must be at least 6 characters');
+    if (newPassword !== confirmPassword) return toast.error('Passwords do not match');
+    const ok = await confirm({
+      title: 'Change Password?',
+      description: 'Your account password will be updated.',
+      confirmLabel: 'Change',
+    });
+    if (!ok) return;
+    setSavingPassword(true);
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) { toast.error(error.message); } else { toast.success('Password updated!'); setShowPasswordEdit(false); setNewPassword(''); setConfirmPassword(''); }
+    setSavingPassword(false);
+  };
+
+  const handleChangePlan = async (newPlan: 'normal' | 'pro') => {
+    if (!user || user.plan === newPlan) return;
+    const ok = await confirm({
+      title: newPlan === 'pro' ? 'Upgrade to Pro?' : 'Downgrade to Normal?',
+      description: newPlan === 'pro'
+        ? 'You\'ll get profile pictures, cloud sync, live sensor sharing, and unlimited group shares. Free!'
+        : 'Your account will be limited to one device and 10 group shares. Cloud recordings already shared will remain.',
+      confirmLabel: newPlan === 'pro' ? 'Upgrade to Pro' : 'Downgrade to Normal',
+      variant: newPlan === 'normal' ? 'warning' : 'default',
+    });
+    if (!ok) return;
+    setSavingPlan(true);
+    await supabase.from('user_profiles').update({ plan: newPlan, device_id: newPlan === 'normal' ? getDeviceId() : null }).eq('id', user.id);
+    await refreshUser();
+    toast.success(newPlan === 'pro' ? 'Upgraded to Pro! Enjoy all features.' : 'Downgraded to Normal plan.');
+    setSavingPlan(false);
+  };
+
+  const handleDeleteAccount = async () => {
+    const ok = await confirm({
+      title: 'Delete Account?',
+      description: 'This will permanently delete your account and all your data. This action cannot be undone.',
+      confirmLabel: 'Delete My Account',
+      variant: 'danger',
+    });
+    if (!ok) return;
+    // Second confirmation
+    const ok2 = await confirm({
+      title: 'Are you absolutely sure?',
+      description: 'Type "delete" in the next step to confirm account deletion.',
+      confirmLabel: 'Yes, Delete Forever',
+      variant: 'danger',
+    });
+    if (!ok2) return;
+    try {
+      await supabase.from('user_profiles').delete().eq('id', user!.id);
+      await supabase.auth.admin?.deleteUser(user!.id);
+    } catch {}
+    await signOut();
+    toast.success('Account deleted. Goodbye!');
+  };
+
+  const handleSignOut = async () => {
+    const ok = await confirm({ title: 'Sign Out?', description: 'You will be signed out of your account.', confirmLabel: 'Sign Out' });
+    if (!ok) return;
+    await signOut();
+    toast.success('Signed out');
+  };
+
+  const handleAvatarUpload = async (file: File) => {
     if (!user) return;
-    setLoadingData(true);
-
-    const { data: reqData } = await supabase
-      .from('friend_requests')
-      .select('id, sender_id, receiver_id, status, created_at')
-      .or(`sender_id.eq.${user.id},receiver_id.eq.${user.id}`);
-
-    const reqs = reqData || [];
-    const profileIds = [...new Set([
-      ...reqs.map((r: { sender_id: string }) => r.sender_id),
-      ...reqs.map((r: { receiver_id: string }) => r.receiver_id),
-    ])].filter((id) => id !== user.id);
-
-    let profileMap: Record<string, Profile> = {};
-    if (profileIds.length > 0) {
-      const { data: pData } = await supabase
-        .from('user_profiles')
-        .select('id, username, email, last_seen')
-        .in('id', profileIds);
-      profileMap = Object.fromEntries((pData || []).map((p: Profile) => [p.id, p]));
+    if (user.plan !== 'pro') {
+      toast.error('Profile pictures are a Pro feature. Upgrade to Pro to add a profile picture.');
+      return;
     }
-
-    const enriched: FriendReq[] = reqs.map((r: { id: string; sender_id: string; receiver_id: string; status: string; created_at: string }) => ({
-      ...r,
-      sender: profileMap[r.sender_id] || null,
-      receiver: profileMap[r.receiver_id] || null,
-    }));
-    setRequests(enriched);
-
-    const { data: myRecs } = await supabase
-      .from('shared_recordings')
-      .select('id, title, sensor_groups, sample_count, duration_ms, created_at')
-      .eq('owner_id', user.id)
-      .order('created_at', { ascending: false });
-    setMyRecordings(myRecs || []);
-
-    const friendIds = enriched
-      .filter(r => r.status === 'accepted')
-      .map(r => r.sender_id === user.id ? r.receiver_id : r.sender_id);
-
-    if (friendIds.length > 0) {
-      const { data: frRecs } = await supabase
-        .from('shared_recordings')
-        .select('id, owner_id, title, sensor_groups, sample_count, duration_ms, created_at')
-        .in('owner_id', friendIds)
-        .order('created_at', { ascending: false });
-      setFriendRecordings((frRecs || []).map((r: CloudRecording) => ({
-        ...r,
-        owner: profileMap[r.owner_id || ''] || null,
-      })));
-    } else {
-      setFriendRecordings([]);
-    }
-
-    setLoadingData(false);
+    if (file.size > 2 * 1024 * 1024) { toast.error('Image must be under 2MB'); return; }
+    setUploadingAvatar(true);
+    const ext = file.name.split('.').pop();
+    const path = `avatars/${user.id}.${ext}`;
+    const { error: uploadError } = await supabase.storage.from('avatars').upload(path, file, { upsert: true });
+    if (uploadError) { toast.error('Failed to upload: ' + uploadError.message); setUploadingAvatar(false); return; }
+    const { data: { publicUrl } } = supabase.storage.from('avatars').getPublicUrl(path);
+    await supabase.from('user_profiles').update({ avatar_url: publicUrl }).eq('id', user.id);
+    await refreshUser();
+    toast.success('Profile picture updated!');
+    setUploadingAvatar(false);
   };
-
-  useEffect(() => {
-    if (!user) return;
-    loadAll();
-    const interval = setInterval(loadAll, 30000);
-    return () => clearInterval(interval);
-  }, [user?.id]);
-
-  const handleRefresh = async () => {
-    setRefreshing(true);
-    await loadAll();
-    setRefreshing(false);
-    toast.success('Refreshed');
-  };
-
-  const handleSearch = async () => {
-    if (!searchQuery.trim() || !user) return;
-    const { data } = await supabase
-      .from('user_profiles')
-      .select('id, username, email, last_seen')
-      .ilike('username', `%${searchQuery.trim()}%`)
-      .neq('id', user.id)
-      .limit(8);
-    setSearchResults(data || []);
-  };
-
-  const sendRequest = async (receiverId: string) => {
-    const { error } = await supabase
-      .from('friend_requests')
-      .insert({ sender_id: user!.id, receiver_id: receiverId });
-    if (error) { toast.error('Failed to send request'); return; }
-    toast.success('Data sharing request sent!');
-    loadAll();
-  };
-
-  const acceptRequest = async (requestId: string) => {
-    const { error } = await supabase
-      .from('friend_requests')
-      .update({ status: 'accepted', updated_at: new Date().toISOString() })
-      .eq('id', requestId);
-    if (error) { toast.error('Failed to accept'); return; }
-    toast.success('Connected! You can now share sensor data.');
-    loadAll();
-  };
-
-  const removeRequest = async (requestId: string) => {
-    await supabase.from('friend_requests').delete().eq('id', requestId);
-    loadAll();
-  };
-
-  const deleteMyRecording = async (recordingId: string) => {
-    const { error } = await supabase.from('shared_recordings').delete().eq('id', recordingId);
-    if (error) { toast.error('Failed to delete'); return; }
-    toast.success('Recording removed from cloud');
-    loadAll();
-  };
-
-  const downloadRecording = async (recordingId: string, title: string) => {
-    const { data } = await supabase
-      .from('shared_recordings').select('data').eq('id', recordingId).single();
-    if (!data) { toast.error('Failed to download'); return; }
-    const blob = new Blob([JSON.stringify(data.data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `${title.replace(/\s+/g, '_')}.json`;
-    a.click(); URL.revokeObjectURL(url);
-  };
-
-  const getReqStatus = (targetId: string) => {
-    const req = requests.find(r =>
-      (r.sender_id === user!.id && r.receiver_id === targetId) ||
-      (r.sender_id === targetId && r.receiver_id === user!.id)
-    );
-    if (!req) return 'none' as const;
-    if (req.status === 'accepted') return 'accepted' as const;
-    if (req.sender_id === user!.id) return 'sent' as const;
-    return 'received' as const;
-  };
-
-  const friends = requests
-    .filter(r => r.status === 'accepted')
-    .map(r => r.sender_id === user?.id ? r.receiver : r.sender)
-    .filter(Boolean) as Profile[];
-
-  const incoming = requests.filter(r => r.status === 'pending' && r.receiver_id === user?.id);
-  const outgoing = requests.filter(r => r.status === 'pending' && r.sender_id === user?.id);
 
   if (authLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    );
+    return <div className="flex items-center justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   }
 
   if (!user) {
     return (
       <div className="flex flex-col items-center gap-4 py-16 text-center">
-        <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
-          <UserCircle2 className="h-8 w-8 text-primary/40" />
-        </div>
+        <img src={logoImg} alt="Logo" className="w-16 h-16 rounded-2xl shadow-lg shadow-primary/20" />
         <div>
-          <p className="text-sm font-medium text-foreground">Sign in to access your account</p>
-          <p className="text-xs text-muted-foreground mt-1 max-w-xs">
-            Create a profile to connect with other users and share sensor recordings across devices.
-          </p>
+          <p className="text-sm font-medium text-foreground">Sign in to your account</p>
+          <p className="text-xs text-muted-foreground mt-1 max-w-xs">Access personal settings, manage your plan, and connect with others.</p>
         </div>
-        <Button onClick={onOpenAuth} className="gap-2">
-          <UserCircle2 className="h-4 w-4" /> Sign In / Sign Up
-        </Button>
+        <Button onClick={onOpenAuth} className="gap-2"><UserCircle2 className="h-4 w-4" /> Sign In / Sign Up</Button>
       </div>
     );
   }
 
-  return (
-    <div className="space-y-4 max-w-2xl mx-auto">
-      <div className="flex items-center justify-between">
-        <h2 className="section-title flex items-center gap-2">
-          <UserCircle2 className="h-5 w-5 text-primary" /> Account
-        </h2>
-        <button
-          onClick={handleRefresh}
-          className="p-1.5 rounded-lg hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
-          title="Refresh data"
-        >
-          <RefreshCw className={cn('h-4 w-4', refreshing && 'animate-spin')} />
-        </button>
-      </div>
+  const isPro = user.plan === 'pro';
 
-      {/* Profile card */}
-      <div className="glass-card p-5 flex items-start gap-4">
-        <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary/30 to-violet-500/30 border-2 border-primary/30 flex items-center justify-center flex-shrink-0">
-          <span className="text-xl font-bold text-primary">{initials(user.username, user.email)}</span>
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-base font-semibold text-foreground truncate">{user.username}</span>
-            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-green-500/10 border border-green-500/20">
-              <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-              <span className="text-[10px] text-green-500 font-medium">Online</span>
+  return (
+    <div className="space-y-4 max-w-xl mx-auto">
+      {confirmDialog}
+      <h2 className="section-title flex items-center gap-2">
+        <UserCircle2 className="h-5 w-5 text-primary" /> Account Settings
+      </h2>
+
+      {/* ── Profile Card ── */}
+      <div className="glass-card p-5">
+        <div className="flex items-start gap-4">
+          {/* Avatar */}
+          <div className="relative flex-shrink-0">
+            <div
+              className={cn(
+                'w-16 h-16 rounded-2xl overflow-hidden border-2 flex items-center justify-center',
+                isPro ? 'border-amber-500/40 cursor-pointer hover:opacity-80 transition-opacity' : 'border-primary/30',
+              )}
+              onClick={() => isPro && avatarInputRef.current?.click()}
+              title={isPro ? 'Click to change profile picture' : 'Upgrade to Pro to add profile picture'}
+            >
+              {user.avatarUrl ? (
+                <img src={user.avatarUrl} alt="avatar" className="w-full h-full object-cover" />
+              ) : (
+                <div className={cn('w-full h-full flex items-center justify-center', isPro ? 'bg-amber-500/15' : 'bg-primary/15')}>
+                  <span className={cn('text-2xl font-bold', isPro ? 'text-amber-500' : 'text-primary')}>
+                    {user.username.slice(0, 1).toUpperCase()}
+                  </span>
+                </div>
+              )}
+              {isPro && (
+                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity rounded-2xl">
+                  {uploadingAvatar ? <Loader2 className="h-5 w-5 text-white animate-spin" /> : <Camera className="h-5 w-5 text-white" />}
+                </div>
+              )}
             </div>
+            {isPro && (
+              <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-amber-500 flex items-center justify-center border-2 border-background">
+                <Star className="h-2.5 w-2.5 text-white fill-white" />
+              </div>
+            )}
+            <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={e => e.target.files?.[0] && handleAvatarUpload(e.target.files[0])} />
           </div>
-          <p className="text-xs text-muted-foreground mt-0.5 truncate">{user.email}</p>
-          <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-            <span className="flex items-center gap-1"><Users className="h-3 w-3" />{friends.length} connected</span>
-            <span className="flex items-center gap-1"><Cloud className="h-3 w-3" />{myRecordings.length} shared</span>
-            {incoming.length > 0 && (
-              <span className="flex items-center gap-1 text-amber-500">
-                <UserPlus className="h-3 w-3" />{incoming.length} request{incoming.length > 1 ? 's' : ''}
+
+          {/* Info */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-base font-semibold text-foreground">{user.username}</span>
+              <span className={cn(
+                'flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-full',
+                isPro ? 'bg-amber-500/15 text-amber-500 border border-amber-500/30' : 'bg-primary/10 text-primary border border-primary/20'
+              )}>
+                {isPro ? <Star className="h-2.5 w-2.5 fill-amber-500" /> : <Zap className="h-2.5 w-2.5" />}
+                {isPro ? 'PRO' : 'NORMAL'}
               </span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">{user.email}</p>
+            {isPro && !user.avatarUrl && (
+              <button
+                onClick={() => avatarInputRef.current?.click()}
+                className="mt-1.5 text-[11px] text-amber-500 hover:text-amber-400 flex items-center gap-1 transition-colors"
+              >
+                <Camera className="h-3 w-3" /> Add profile picture
+              </button>
+            )}
+            {!isPro && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                <Star className="h-2.5 w-2.5 text-amber-500 inline mr-0.5" />
+                Profile pics available on Pro plan
+              </p>
             )}
           </div>
+
+          {/* Sign out */}
+          <Button variant="outline" size="sm" onClick={handleSignOut} className="border-red-500/30 text-red-500 hover:bg-red-500/10 gap-1.5 flex-shrink-0">
+            <LogOut className="h-3.5 w-3.5" /> Sign Out
+          </Button>
         </div>
+      </div>
+
+      {/* ── Edit Username ── */}
+      <SensorCard title="Username" icon={<User className="h-4 w-4 text-primary" />}>
+        {!showUsernameEdit ? (
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-foreground font-medium">{user.username}</span>
+            <Button size="sm" variant="outline" onClick={() => { setEditUsername(user.username); setShowUsernameEdit(true); }} className="h-7 text-xs gap-1">
+              <User className="h-3 w-3" /> Change
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <Field icon={User} placeholder="New username" value={editUsername} onChange={setEditUsername} autoFocus />
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleSaveUsername} disabled={savingUsername} className="gap-1.5 h-8">
+                {savingUsername ? <Loader2 className="h-3 w-3 animate-spin" /> : null}Save
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setShowUsernameEdit(false)} className="h-8">
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        )}
+      </SensorCard>
+
+      {/* ── Change Password ── */}
+      <SensorCard title="Password" icon={<Lock className="h-4 w-4 text-primary" />}>
+        {!showPasswordEdit ? (
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">••••••••</span>
+            <Button size="sm" variant="outline" onClick={() => setShowPasswordEdit(true)} className="h-7 text-xs gap-1">
+              <Lock className="h-3 w-3" /> Change
+            </Button>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <Field
+              icon={Lock}
+              placeholder="New password (min 6 chars)"
+              value={newPassword}
+              onChange={setNewPassword}
+              type={showPass ? 'text' : 'password'}
+              autoFocus
+              right={
+                <button onClick={() => setShowPass(p => !p)} className="text-muted-foreground hover:text-foreground flex-shrink-0">
+                  {showPass ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                </button>
+              }
+            />
+            <Field
+              icon={Lock}
+              placeholder="Confirm new password"
+              value={confirmPassword}
+              onChange={setConfirmPassword}
+              type={showPass ? 'text' : 'password'}
+            />
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleSavePassword} disabled={savingPassword} className="gap-1.5 h-8">
+                {savingPassword ? <Loader2 className="h-3 w-3 animate-spin" /> : null}Save
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => { setShowPasswordEdit(false); setNewPassword(''); setConfirmPassword(''); }} className="h-8">
+                <X className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        )}
+      </SensorCard>
+
+      {/* ── Plan Management ── */}
+      <SensorCard title="Plan" icon={<Shield className="h-4 w-4 text-amber-500" />}>
+        <div className="space-y-3">
+          {/* Current plan */}
+          <div className={cn(
+            'p-3 rounded-xl border-2',
+            isPro ? 'border-amber-500/40 bg-amber-500/5' : 'border-primary/30 bg-primary/5'
+          )}>
+            <div className="flex items-center gap-2 mb-1">
+              {isPro ? <Star className="h-4 w-4 text-amber-500 fill-amber-500" /> : <Zap className="h-4 w-4 text-primary" />}
+              <span className={cn('text-sm font-bold', isPro ? 'text-amber-500' : 'text-primary')}>
+                {isPro ? 'Pro Plan' : 'Normal Plan'}
+              </span>
+              <span className="ml-auto text-xs text-muted-foreground">Free</span>
+            </div>
+            <PlanFeatures plan={user.plan} />
+          </div>
+
+          {/* Switch plan */}
+          {isPro ? (
+            <button
+              onClick={() => handleChangePlan('normal')}
+              disabled={savingPlan}
+              className="w-full flex items-center gap-2 p-2.5 rounded-xl border border-border/40 bg-muted/10 hover:bg-muted/20 transition-colors text-left"
+            >
+              {savingPlan ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : <ArrowDownLeft className="h-4 w-4 text-muted-foreground" />}
+              <div>
+                <div className="text-xs font-medium text-foreground">Downgrade to Normal</div>
+                <div className="text-[10px] text-muted-foreground">Single device · 10 group shares</div>
+              </div>
+            </button>
+          ) : (
+            <button
+              onClick={() => handleChangePlan('pro')}
+              disabled={savingPlan}
+              className="w-full flex items-center gap-2 p-2.5 rounded-xl border border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 transition-colors text-left"
+            >
+              {savingPlan ? <Loader2 className="h-4 w-4 animate-spin text-amber-500" /> : <ArrowUpRight className="h-4 w-4 text-amber-500" />}
+              <div>
+                <div className="text-xs font-bold text-amber-500">Upgrade to Pro — Free!</div>
+                <div className="text-[10px] text-muted-foreground">Cloud sync · Live sharing · Unlimited shares</div>
+              </div>
+            </button>
+          )}
+        </div>
+      </SensorCard>
+
+      {/* ── Danger Zone ── */}
+      <SensorCard title="Danger Zone" icon={<Trash2 className="h-4 w-4 text-red-500" />}>
+        <p className="text-xs text-muted-foreground mb-3">
+          Permanently delete your account and all associated data. This cannot be undone.
+        </p>
         <Button
           variant="outline"
           size="sm"
-          onClick={() => { signOut(); toast.success('Signed out'); }}
-          className="border-red-500/30 text-red-500 hover:bg-red-500/10 gap-1.5 flex-shrink-0"
+          onClick={handleDeleteAccount}
+          className="border-red-500/40 text-red-500 hover:bg-red-500/10 gap-1.5"
         >
-          <LogOut className="h-3.5 w-3.5" /> Sign Out
+          <Trash2 className="h-3.5 w-3.5" /> Delete Account
         </Button>
-      </div>
-
-      {/* Find Users */}
-      <SensorCard title="Find Users" icon={<Search className="h-4 w-4 text-cyan-400" />}>
-        <div className="flex flex-col sm:flex-row gap-2">
-          <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded-xl border border-border/50 bg-muted/20 focus-within:border-primary/50 transition-colors min-w-0">
-            <Search className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
-            <input
-              type="text"
-              placeholder="Search by username..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleSearch()}
-              className="flex-1 min-w-0 bg-transparent text-sm text-foreground placeholder:text-muted-foreground outline-none"
-            />
-            {searchQuery && (
-              <button
-                onClick={() => { setSearchQuery(''); setSearchResults([]); }}
-                className="text-muted-foreground hover:text-foreground flex-shrink-0"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-          <Button size="sm" onClick={handleSearch} className="gap-1.5 w-full sm:w-auto sm:flex-shrink-0">
-            <Search className="h-3.5 w-3.5" /> Search
-          </Button>
-        </div>
-
-        {searchResults.length > 0 && (
-          <div className="mt-3 space-y-2">
-            {searchResults.map(profile => {
-              const status = getReqStatus(profile.id);
-              const online = isOnline(profile.last_seen);
-              return (
-                <div key={profile.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-muted/20 border border-border/40">
-                  <div className="relative flex-shrink-0">
-                    <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center">
-                      <span className="text-xs font-bold text-primary">{initials(profile.username, profile.email)}</span>
-                    </div>
-                    {online && <div className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-green-500 border-2 border-background" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium text-foreground truncate">{profile.username || profile.email}</div>
-                    <div className={cn('text-[11px]', online ? 'text-green-500' : 'text-muted-foreground')}>
-                      {online ? '● Online now' : '○ Offline'}
-                    </div>
-                  </div>
-                  {status === 'none' && (
-                    <Button size="sm" variant="outline" onClick={() => sendRequest(profile.id)} className="gap-1 text-xs h-7 flex-shrink-0">
-                      <UserPlus className="h-3 w-3" /> Request
-                    </Button>
-                  )}
-                  {status === 'sent' && (
-                    <span className="text-xs text-muted-foreground px-2 py-1 rounded-lg bg-muted/40 border border-border/40 flex-shrink-0">Pending</span>
-                  )}
-                  {status === 'received' && (
-                    <span className="text-xs text-amber-500 px-2 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 flex-shrink-0">Awaiting you</span>
-                  )}
-                  {status === 'accepted' && (
-                    <span className="flex items-center gap-1 text-xs text-green-500 px-2 py-1 rounded-lg bg-green-500/10 border border-green-500/20 flex-shrink-0">
-                      <CheckCircle2 className="h-3 w-3" /> Connected
-                    </span>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-        {searchQuery && searchResults.length === 0 && (
-          <p className="text-xs text-muted-foreground mt-3 text-center">No users found for "{searchQuery}"</p>
-        )}
-      </SensorCard>
-
-      {/* Sharing Requests */}
-      {(incoming.length > 0 || outgoing.length > 0) && (
-        <SensorCard
-          title={`Sharing Requests${incoming.length > 0 ? ` · ${incoming.length} new` : ''}`}
-          icon={<UserPlus className="h-4 w-4 text-amber-400" />}
-        >
-          {incoming.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Incoming</p>
-              {incoming.map(req => {
-                const sender = req.sender;
-                return (
-                  <div key={req.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-amber-500/5 border border-amber-500/20">
-                    <div className="w-8 h-8 rounded-full bg-amber-500/15 flex items-center justify-center flex-shrink-0">
-                      <span className="text-xs font-bold text-amber-500">{initials(sender?.username, sender?.email || '?')}</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-foreground truncate">{sender?.username || sender?.email}</div>
-                      <div className="text-[11px] text-muted-foreground">Wants to share sensor data</div>
-                    </div>
-                    <div className="flex gap-1.5 flex-shrink-0">
-                      <Button size="sm" onClick={() => acceptRequest(req.id)} className="h-7 gap-1 text-xs bg-green-500 hover:bg-green-600 text-white">
-                        <UserCheck className="h-3 w-3" /> Accept
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => removeRequest(req.id)} className="h-7 text-muted-foreground hover:text-red-500">
-                        <UserX className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {outgoing.length > 0 && (
-            <div className={cn('space-y-2', incoming.length > 0 && 'mt-4')}>
-              <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Outgoing</p>
-              {outgoing.map(req => {
-                const receiver = req.receiver;
-                return (
-                  <div key={req.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-muted/20 border border-border/40">
-                    <div className="w-8 h-8 rounded-full bg-muted/40 flex items-center justify-center flex-shrink-0">
-                      <span className="text-xs font-bold text-muted-foreground">{initials(receiver?.username, receiver?.email || '?')}</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-medium text-foreground truncate">{receiver?.username || receiver?.email}</div>
-                      <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
-                        <Clock className="h-3 w-3" /> Awaiting response
-                      </div>
-                    </div>
-                    <Button size="sm" variant="ghost" onClick={() => removeRequest(req.id)} className="h-7 text-muted-foreground hover:text-red-500 text-xs flex-shrink-0">
-                      Cancel
-                    </Button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </SensorCard>
-      )}
-
-      {/* Connected Devices */}
-      <SensorCard title="Connected Devices" icon={<Users className="h-4 w-4 text-emerald-400" />}>
-        {loadingData ? (
-          <div className="flex items-center justify-center py-6">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : friends.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-6 text-center">
-            <Users className="h-8 w-8 text-muted-foreground/30" />
-            <p className="text-sm text-muted-foreground">No connections yet</p>
-            <p className="text-xs text-muted-foreground/70">Search for users above to send a data sharing request</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {friends.map(friend => {
-              if (!friend) return null;
-              const online = isOnline(friend.last_seen);
-              const theirRecs = friendRecordings.filter(r => r.owner_id === friend.id);
-              return (
-                <div key={friend.id} className="p-3 rounded-xl border border-border/40 bg-muted/10">
-                  <div className="flex items-center gap-3">
-                    <div className="relative flex-shrink-0">
-                      <div className={cn(
-                        'w-10 h-10 rounded-full flex items-center justify-center border-2',
-                        online ? 'bg-green-500/15 border-green-500/30' : 'bg-muted/40 border-border/40'
-                      )}>
-                        <span className={cn('text-sm font-bold', online ? 'text-green-500' : 'text-muted-foreground')}>
-                          {initials(friend.username, friend.email)}
-                        </span>
-                      </div>
-                      <div className={cn(
-                        'absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-background',
-                        online ? 'bg-green-500' : 'bg-muted-foreground/30'
-                      )} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm font-semibold text-foreground truncate">{friend.username || friend.email}</div>
-                      <div className={cn('text-[11px]', online ? 'text-green-500' : 'text-muted-foreground')}>
-                        {online
-                          ? '● Device Online'
-                          : `○ Last seen ${friend.last_seen ? formatDate(friend.last_seen) : 'never'}`}
-                      </div>
-                    </div>
-                    <div className="text-right text-[11px] text-muted-foreground flex-shrink-0">
-                      <span className="text-foreground/70 font-medium">{theirRecs.length}</span> recording{theirRecs.length !== 1 ? 's' : ''}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </SensorCard>
-
-      {/* Friends' Recordings */}
-      {friendRecordings.length > 0 && (
-        <SensorCard title="Friends' Recordings" icon={<Activity className="h-4 w-4 text-violet-400" />}>
-          <div className="space-y-2">
-            {friendRecordings.map(rec => (
-              <div key={rec.id} className="flex items-start gap-3 p-3 rounded-xl border border-border/40 bg-muted/10 hover:bg-muted/20 transition-colors">
-                <div className="w-9 h-9 rounded-lg bg-violet-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <Activity className="h-4 w-4 text-violet-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-foreground truncate">{rec.title}</div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5">
-                    by <span className="text-foreground/70">{rec.owner?.username || 'Unknown'}</span>
-                    {' · '}{rec.sample_count} samples · {formatDuration(rec.duration_ms)}
-                  </div>
-                  {rec.sensor_groups && rec.sensor_groups.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {rec.sensor_groups.slice(0, 3).map(g => (
-                        <span key={g} className="text-[10px] bg-violet-500/10 border border-violet-500/20 rounded-full px-2 py-0.5 text-violet-400">{g}</span>
-                      ))}
-                      {rec.sensor_groups.length > 3 && (
-                        <span className="text-[10px] text-muted-foreground">+{rec.sensor_groups.length - 3} more</span>
-                      )}
-                    </div>
-                  )}
-                  <div className="text-[10px] text-muted-foreground/60 mt-1">{formatDate(rec.created_at)}</div>
-                </div>
-                <button
-                  onClick={() => downloadRecording(rec.id, rec.title)}
-                  className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors flex-shrink-0 mt-0.5"
-                  title="Download JSON"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </SensorCard>
-      )}
-
-      {/* My Cloud Recordings */}
-      <SensorCard title="My Cloud Recordings" icon={<Cloud className="h-4 w-4 text-blue-400" />}>
-        {myRecordings.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 py-5 text-center">
-            <Cloud className="h-8 w-8 text-muted-foreground/30" />
-            <p className="text-sm text-muted-foreground">No cloud recordings yet</p>
-            <p className="text-xs text-muted-foreground/70">
-              Go to <span className="font-medium text-foreground">Recording</span> → record a session → click{' '}
-              <span className="font-medium text-foreground">Share to Cloud</span>
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {myRecordings.map(rec => (
-              <div key={rec.id} className="flex items-start gap-3 p-3 rounded-xl border border-border/40 bg-muted/10 hover:bg-muted/20 transition-colors">
-                <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                  <Activity className="h-4 w-4 text-blue-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-sm font-medium text-foreground truncate">{rec.title}</div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5">
-                    {rec.sample_count} samples · {formatDuration(rec.duration_ms)}
-                  </div>
-                  {rec.sensor_groups && rec.sensor_groups.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1.5">
-                      {rec.sensor_groups.slice(0, 4).map(g => (
-                        <span key={g} className="text-[10px] bg-blue-500/10 border border-blue-500/20 rounded-full px-2 py-0.5 text-blue-400">{g}</span>
-                      ))}
-                    </div>
-                  )}
-                  <div className="text-[10px] text-muted-foreground/60 mt-1">{formatDate(rec.created_at)}</div>
-                </div>
-                <div className="flex gap-1 flex-shrink-0 mt-0.5">
-                  <button
-                    onClick={() => downloadRecording(rec.id, rec.title)}
-                    className="p-1.5 rounded-lg hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"
-                    title="Download JSON"
-                  >
-                    <Download className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => deleteMyRecording(rec.id)}
-                    className="p-1.5 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-500 transition-colors"
-                    title="Delete"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="mt-3 pt-3 border-t border-border/40">
-          <p className="text-[11px] text-muted-foreground flex items-center gap-1.5">
-            <Info className="h-3 w-3 flex-shrink-0" />
-            Shared recordings are visible to your connected devices. Delete anytime to remove access.
-          </p>
-        </div>
       </SensorCard>
     </div>
   );
+}
+
+function getDeviceId(): string {
+  let id = localStorage.getItem('_sensor_device_id');
+  if (!id) {
+    id = `dev_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem('_sensor_device_id', id);
+  }
+  return id;
 }

@@ -14,6 +14,7 @@ import { PermissionsSection } from '@/components/features/PermissionsSection';
 import { SensorStatusSection } from '@/components/features/SensorStatusSection';
 import { VisualizationSection } from '@/components/features/VisualizationSection';
 import { RecordingSection } from '@/components/features/RecordingSection';
+import { GroupSection } from '@/components/features/GroupSection';
 import { AboutSection } from '@/components/features/AboutSection';
 import { AccountSection } from '@/components/features/AccountSection';
 import { AuthModal } from '@/components/features/AuthModal';
@@ -35,7 +36,8 @@ const SECTION_TITLES: Record<NavSection, string> = {
   status: 'Sensor Status',
   visualization: 'Data Visualization',
   recording: 'Sensor Recording',
-  account: 'Account',
+  group: 'Group',
+  account: 'Account Settings',
   about: 'About',
 };
 
@@ -77,22 +79,23 @@ export default function Index() {
 
   const renderSection = () => {
     switch (activeSection) {
-      case 'dashboard': return <DashboardHome onNavigate={setActiveSection} />;
-      case 'motion': return <MotionSection />;
-      case 'location': return <LocationSection />;
-      case 'environment': return <EnvironmentSection />;
-      case 'battery': return <BatterySection />;
-      case 'audio': return <AudioSection />;
-      case 'camera': return <CameraSection />;
-      case 'network': return <NetworkSection />;
-      case 'device': return <DeviceSection />;
-      case 'permissions': return <PermissionsSection />;
-      case 'status': return <SensorStatusSection />;
+      case 'dashboard':     return <DashboardHome onNavigate={setActiveSection} />;
+      case 'motion':        return <MotionSection />;
+      case 'location':      return <LocationSection />;
+      case 'environment':   return <EnvironmentSection />;
+      case 'battery':       return <BatterySection />;
+      case 'audio':         return <AudioSection />;
+      case 'camera':        return <CameraSection />;
+      case 'network':       return <NetworkSection />;
+      case 'device':        return <DeviceSection />;
+      case 'permissions':   return <PermissionsSection />;
+      case 'status':        return <SensorStatusSection />;
       case 'visualization': return <VisualizationSection />;
-      case 'recording': return <RecordingSection />;
-      case 'account': return <AccountSection onOpenAuth={() => setAuthModalOpen(true)} />;
-      case 'about': return <AboutSection />;
-      default: return <DashboardHome onNavigate={setActiveSection} />;
+      case 'recording':     return <RecordingSection />;
+      case 'group':         return <GroupSection onOpenAuth={() => setAuthModalOpen(true)} />;
+      case 'account':       return <AccountSection onOpenAuth={() => setAuthModalOpen(true)} />;
+      case 'about':         return <AboutSection />;
+      default:              return <DashboardHome onNavigate={setActiveSection} />;
     }
   };
 
@@ -115,7 +118,6 @@ export default function Index() {
         />
 
         <main className="flex-1 min-w-0 p-4 sm:p-6 lg:ml-0">
-          {/* Breadcrumb */}
           {activeSection !== 'dashboard' && (
             <div className="flex items-center gap-2 mb-4 text-sm">
               <button
@@ -128,7 +130,6 @@ export default function Index() {
               <span className="text-foreground font-medium">{SECTION_TITLES[activeSection]}</span>
             </div>
           )}
-
           {renderSection()}
         </main>
       </div>
