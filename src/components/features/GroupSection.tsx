@@ -14,7 +14,7 @@ import {
   RefreshCw, Loader2, UserCircle2, Info, Eye,
   CheckCircle2, UserCheck, UserX, UserPlus, X, Search,
   Star, Wifi, Radio, Filter, Zap, MapPin, Battery,
-  BatteryCharging, Signal, AlertCircle,
+  BatteryCharging, Signal, AlertCircle, Play,
 } from 'lucide-react';
 
 interface Profile {
@@ -149,9 +149,12 @@ interface RecCardProps {
   ownerName?: string;
   canDelete?: boolean;
   onDelete?: () => void;
+  /** Pass handler to show Resume button (Pro users only) */
+  onResume?: () => void;
+  isPro?: boolean;
 }
 
-function RecCard({ rec, onView, onDownload, ownerName, canDelete, onDelete }: RecCardProps) {
+function RecCard({ rec, onView, onDownload, ownerName, canDelete, onDelete, onResume, isPro }: RecCardProps) {
   return (
     <div className="flex items-start gap-3 p-3 rounded-xl border border-border/40 bg-muted/10 hover:bg-muted/20 transition-colors">
       <div className="w-9 h-9 rounded-lg bg-violet-500/10 flex items-center justify-center flex-shrink-0 mt-0.5">
@@ -186,13 +189,29 @@ function RecCard({ rec, onView, onDownload, ownerName, canDelete, onDelete }: Re
             <Trash2 className="h-3.5 w-3.5" />
           </button>
         )}
+        {onResume && isPro && (
+          <button onClick={onResume} className="p-1.5 rounded-lg hover:bg-emerald-500/10 text-muted-foreground hover:text-emerald-500 transition-colors" title="Resume recording (Pro)">
+            <Play className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {onResume && !isPro && (
+          <button onClick={onResume} className="p-1.5 rounded-lg text-amber-500/50 cursor-default" title="Resume — Pro plan required">
+            <Star className="h-3 w-3" />
+          </button>
+        )}
       </div>
     </div>
   );
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────
-export function GroupSection({ onOpenAuth }: { onOpenAuth: () => void }) {
+export function GroupSection({
+  onOpenAuth,
+  onResumeRecording,
+}: {
+  onOpenAuth: () => void;
+  onResumeRecording?: (rows: RecordingRow[], durationMs: number, title: string) => void;
+}) {
   const { user } = useAuth();
   const { confirm, dialog: confirmDialog } = useConfirm();
 
@@ -372,6 +391,26 @@ export function GroupSection({ onOpenAuth }: { onOpenAuth: () => void }) {
     if (req.status === 'accepted') return 'accepted' as const;
     if (req.sender_id === user!.id) return 'sent' as const;
     return 'received' as const;
+  };
+
+  const handleResumeFriendRecording = async (recording: CloudRecording) => {
+    if (user?.plan !== 'pro') {
+      toast.info('Resume is a Pro plan feature', { description: 'Upgrade to Pro to resume friend recordings.' });
+      return;
+    }
+    const ok = await confirm({
+      title: 'Resume Friend Recording?',
+      description: `A new recording will start from where "${recording.title}" left off. New sensor data will be appended.`,
+      confirmLabel: 'Resume',
+    });
+    if (!ok) return;
+    let rows = recording.data;
+    if (!rows) {
+      const { data } = await supabase.from('shared_recordings').select('data').eq('id', recording.id).single();
+      rows = data?.data || [];
+    }
+    onResumeRecording?.(rows as RecordingRow[], recording.duration_ms, `${recording.title} (resumed)`);
+    toast.success('Navigating to Recording — new samples will be appended');
   };
 
   const incoming = requests.filter(r => r.status === 'pending' && r.receiver_id === user?.id);
@@ -746,6 +785,8 @@ export function GroupSection({ onOpenAuth }: { onOpenAuth: () => void }) {
                 ownerName={rec.owner?.username || rec.owner?.email || 'Unknown'}
                 onView={() => openRecording(rec)}
                 onDownload={() => downloadRecording(rec)}
+                onResume={onResumeRecording ? () => handleResumeFriendRecording(rec) : undefined}
+                isPro={user?.plan === 'pro'}
               />
             ))}
           </div>

@@ -20,6 +20,8 @@ import { AccountSection } from '@/components/features/AccountSection';
 import { AuthModal } from '@/components/features/AuthModal';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/lib/supabase';
+import { useNotifications } from '@/hooks/useNotifications';
+import { RecordingRow } from '@/hooks/useRecording';
 import { NavSection } from '@/types/sensors';
 
 const SECTION_TITLES: Record<NavSection, string> = {
@@ -41,8 +43,19 @@ const SECTION_TITLES: Record<NavSection, string> = {
   about: 'About',
 };
 
+interface PendingResume {
+  rows: RecordingRow[];
+  durationMs: number;
+  title: string;
+}
+
 export default function Index() {
   const { user } = useAuth();
+
+  // Notifications on sign-in
+  useNotifications(user?.id);
+
+  const [pendingResume, setPendingResume] = useState<PendingResume | null>(null);
 
   const [darkMode, setDarkMode] = useState(() => {
     const stored = localStorage.getItem('sensor-dash-dark');
@@ -91,8 +104,8 @@ export default function Index() {
       case 'permissions':   return <PermissionsSection />;
       case 'status':        return <SensorStatusSection />;
       case 'visualization': return <VisualizationSection />;
-      case 'recording':     return <RecordingSection />;
-      case 'group':         return <GroupSection onOpenAuth={() => setAuthModalOpen(true)} />;
+      case 'recording':     return <RecordingSection pendingResume={pendingResume} onResumeDone={() => setPendingResume(null)} />;
+      case 'group':         return <GroupSection onOpenAuth={() => setAuthModalOpen(true)} onResumeRecording={(rows, durationMs, title) => { setPendingResume({ rows, durationMs, title }); setActiveSection('recording'); }} />;
       case 'account':       return <AccountSection onOpenAuth={() => setAuthModalOpen(true)} />;
       case 'about':         return <AboutSection />;
       default:              return <DashboardHome onNavigate={setActiveSection} />;

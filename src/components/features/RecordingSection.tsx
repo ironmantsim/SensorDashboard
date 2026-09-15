@@ -224,7 +224,12 @@ function RecHistoryItem({
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────
-export function RecordingSection() {
+interface RecordingSectionProps {
+  pendingResume?: { rows: RecordingRow[]; durationMs: number; title: string } | null;
+  onResumeDone?: () => void;
+}
+
+export function RecordingSection({ pendingResume, onResumeDone }: RecordingSectionProps = {}) {
   const rec = useRecording();
   const [resumeSourceId, setResumeSourceId] = useState<string | null>(null);
   const { user } = useAuth();
@@ -364,6 +369,20 @@ export function RecordingSection() {
       device_cpu_cores: enabled.device_cpu ? deviceInfo.hardwareConcurrency : null,
     }));
   }, [motionData, locationData, battery, networkData, light, baro, compass, deviceInfo, audioData, cameraStream, enabled]);
+
+  // Auto-resume from Group page ──
+  const pendingResumeApplied = useRef<object | null>(null);
+  useEffect(() => {
+    if (!pendingResume || rec.isRecording) return;
+    if (pendingResumeApplied.current === pendingResume) return;
+    pendingResumeApplied.current = pendingResume;
+    setRecordingTitle(pendingResume.title);
+    setShowTitleInput(false);
+    setResumeSourceId('__friend__');
+    rec.resumeFrom(pendingResume.rows, pendingResume.durationMs);
+    onResumeDone?.();
+    toast.success(`Resuming "${pendingResume.title}" — new samples will be appended`);
+  }, [pendingResume]);
 
   // ── Recording controls ──
   const [recordingTitle, setRecordingTitle] = useState('');
