@@ -57,6 +57,36 @@ export function useRecording() {
     dataGetterRef.current = fn;
   }, []);
 
+  // Resume: pre-load rows from a past recording and keep appending
+  const resumeFrom = useCallback((previousRows: RecordingRow[], priorDurationMs: number) => {
+    const now = Date.now();
+    // Offset the startTime so elapsed continues from priorDurationMs
+    startTimeRef.current = now - priorDurationMs;
+    setState(prev => ({
+      ...prev,
+      isRecording: true,
+      startTime: now - priorDurationMs,
+      rows: previousRows,
+      elapsed: priorDurationMs,
+    }));
+
+    intervalRef.current = setInterval(() => {
+      setState(prev => ({ ...prev, elapsed: Date.now() - startTimeRef.current }));
+    }, 500);
+
+    sampleIntervalRef.current = setInterval(() => {
+      if (!dataGetterRef.current) return;
+      const data = dataGetterRef.current();
+      const now = Date.now();
+      const row: RecordingRow = {
+        timestamp: new Date(now).toISOString(),
+        elapsed_ms: now - startTimeRef.current,
+        ...data,
+      };
+      setState(prev => ({ ...prev, rows: [...prev.rows, row] }));
+    }, 500);
+  }, []);
+
   const startRecording = useCallback(() => {
     const now = Date.now();
     startTimeRef.current = now;
@@ -132,6 +162,7 @@ export function useRecording() {
     ...state,
     registerDataGetter,
     startRecording,
+    resumeFrom,
     stopRecording,
     clearRecording,
     downloadCSV,

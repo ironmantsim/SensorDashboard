@@ -25,7 +25,7 @@ import {
   Share2, Upload, Loader2, X as XIcon, Zap, RotateCcw,
   Compass, MapPin, Battery, BatteryCharging, Gauge, Sun,
   Wifi, Signal, Lock, ArrowDown, Mic, Camera, Monitor,
-  Globe, HardDrive, Cpu, Pencil, Check, Eye, Star, CloudOff,
+  Globe, HardDrive, Cpu, Pencil, Check, Eye, Star, CloudOff, Play,
 } from 'lucide-react';
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -99,12 +99,13 @@ interface RecHistoryItemProps {
   onShareToggle: () => void;
   onDownloadCsv: () => void;
   onDownloadJson: () => void;
+  onResume: () => void;
   sharing: boolean;
 }
 
 function RecHistoryItem({
   rec, user, sharedCount, onView, onRename, onDelete, onShareToggle,
-  onDownloadCsv, onDownloadJson, sharing,
+  onDownloadCsv, onDownloadJson, onResume, sharing,
 }: RecHistoryItemProps) {
   const [editing, setEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(rec.title);
@@ -179,6 +180,16 @@ function RecHistoryItem({
         <button onClick={onDownloadJson} className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors">
           <FileJson className="h-3 w-3" /> JSON
         </button>
+        <span className="text-border">·</span>
+        {user?.plan === 'pro' ? (
+          <button onClick={onResume} className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-500 transition-colors">
+            <Play className="h-3 w-3" /> Resume
+          </button>
+        ) : (
+          <span className="flex items-center gap-1 text-xs text-amber-500/60 cursor-default" title="Pro plan feature">
+            <Star className="h-2.5 w-2.5" /><Play className="h-3 w-3" /> Resume
+          </span>
+        )}
         {user && (
           <>
             <span className="text-border">·</span>
@@ -215,6 +226,7 @@ function RecHistoryItem({
 // ── Main Component ─────────────────────────────────────────────────────────
 export function RecordingSection() {
   const rec = useRecording();
+  const [resumeSourceId, setResumeSourceId] = useState<string | null>(null);
   const { user } = useAuth();
   const local = useLocalRecordings();
   const { confirm, dialog: confirmDialog } = useConfirm();
@@ -360,16 +372,37 @@ export function RecordingSection() {
   const handleStop = () => {
     rec.stopRecording();
     setShowTitleInput(true);
+    setResumeSourceId(null);
+  };
+
+  const handleResume = async (recItem: LocalRecording) => {
+    if (rec.isRecording) return toast.error('Stop the current recording first');
+    const ok = await confirm({
+      title: 'Resume Recording?',
+      description: `A new recording will start from where "${recItem.title}" left off. All existing samples will be preserved and new data appended.`,
+      confirmLabel: 'Resume',
+    });
+    if (!ok) return;
+    setResumeSourceId(recItem.id);
+    setShowTitleInput(false);
+    setRecordingTitle(`${recItem.title} (resumed)`);
+    rec.resumeFrom(recItem.rows, recItem.durationMs);
+    toast.success('Recording resumed — new samples are being appended');
   };
 
   const handleSaveLocal = () => {
     const activeGroups = [...new Set(SENSORS.filter(s => enabled[s.id]).map(s => s.group))];
     const title = recordingTitle.trim() || `Recording ${new Date().toLocaleString()}`;
+    // If resuming, delete the source recording and save merged result
+    if (resumeSourceId) {
+      local.deleteRecording(resumeSourceId);
+    }
     local.saveRecording(rec.rows, rec.elapsed, activeGroups, title);
     rec.clearRecording();
     setShowTitleInput(false);
     setRecordingTitle('');
-    toast.success('Recording saved locally!');
+    setResumeSourceId(null);
+    toast.success(resumeSourceId ? 'Resumed recording saved!' : 'Recording saved locally!');
   };
 
   // ── History actions ──
@@ -624,6 +657,7 @@ export function RecordingSection() {
                 onRename={title => local.renameRecording(r.id, title)}
                 onDelete={() => handleDelete(r)}
                 onShareToggle={() => handleShareToggle(r)}
+                onResume={() => handleResume(r)}
                 onDownloadCsv={() => {
                   const rows = r.rows;
                   if (!rows.length) return;
