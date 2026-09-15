@@ -16,6 +16,7 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
+  { id: 'group',         label: 'Group',          icon: Users,           color: 'text-violet-500' },
   { id: 'dashboard',     label: 'Dashboard',     icon: LayoutDashboard, color: 'text-primary' },
   { id: 'motion',        label: 'Motion',         icon: Cpu,             color: 'text-violet-500' },
   { id: 'location',      label: 'Location & GPS', icon: MapPin,          color: 'text-emerald-500' },
@@ -29,7 +30,6 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'status',        label: 'Sensor Status',  icon: CheckCircle,     color: 'text-green-500' },
   { id: 'visualization', label: 'Visualization',  icon: BarChart2,       color: 'text-rose-500' },
   { id: 'recording',     label: 'Recording',      icon: Circle,          color: 'text-red-500' },
-  { id: 'group',         label: 'Group',          icon: Users,           color: 'text-violet-500' },
   { id: 'about',         label: 'About',          icon: Info,            color: 'text-primary' },
 ];
 
